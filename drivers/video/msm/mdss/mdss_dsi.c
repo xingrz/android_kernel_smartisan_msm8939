@@ -111,6 +111,8 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 			pr_err("%s: failed to disable vregs for %s\n",
 				__func__, __mdss_dsi_pm_name(i));
 	}
+	mdss_dsi_panel_power_vdd(pdata,0);
+	mdelay(200);
 
 end:
 	return ret;
@@ -130,6 +132,8 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
+	mdss_dsi_panel_power_vdd(pdata,1);
+	mdelay(10);
 	for (i = 0; i < DSI_MAX_PM; i++) {
 		/*
 		 * Core power module will be enabled when the
@@ -1557,6 +1561,9 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 		}
 		disable_irq(gpio_to_irq(ctrl_pdata->disp_te_gpio));
 	}
+ 
+	msm_panel_vendor_show(pdev);
+
 	pr_debug("%s: Dsi Ctrl->%d initialized\n", __func__, index);
 	return 0;
 
@@ -1835,6 +1842,12 @@ int dsi_panel_device_register(struct device_node *pan_node,
 			 "qcom,platform-reset-gpio", 0);
 	if (!gpio_is_valid(ctrl_pdata->rst_gpio))
 		pr_err("%s:%d, reset gpio not specified\n",
+						__func__, __LINE__);				
+
+	ctrl_pdata->vdd_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+			"qcom,platform-vdd-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->vdd_gpio))
+		pr_err("%s:%d, vdd gpio not specified\n",
 						__func__, __LINE__);
 
 	if (pinfo->mode_gpio_state != MODE_GPIO_NOT_VALID) {

@@ -54,6 +54,8 @@
 #include "mdss_fb.h"
 #include "mdss_mdp_splash_logo.h"
 
+#include <linux/kobject.h>
+
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #define MDSS_FB_NUM 3
 #else
@@ -230,6 +232,77 @@ static int mdss_fb_notify_update(struct msm_fb_data_type *mfd,
 
 static int lcd_backlight_registered;
 
+static int bl_level[] = {6,45,80,105,130,145,160,190,213,220,230,243};
+int set_backlight_curve(struct msm_fb_data_type *mfd, u32 level)
+{
+	int i;
+	if (level == 0)
+		return 0;
+	if (level < 6)
+		return 1;
+	if (level < bl_level[5]){
+		for (i = 1;i <= 5;i++){
+			if (level >= bl_level[i-1] && level < bl_level[i]){
+			switch(i){
+				case 1:{
+				  level = level/3;
+				  break;
+				}
+				case 2:{
+				  level = level*3/8;
+				  break;
+				}
+				case 3:{
+				  level = level*5/12;
+				  break;
+				}
+				case 4:{
+				  level = level*1/2;
+				  break;
+				}
+				case 5:{
+				  level = level*7/12;
+				  break;
+				}
+			};
+		}
+	  }
+   }else{
+		for (i = 6;i <= 11;i++){
+			if (level >= bl_level[i-1] && level < bl_level[i]){
+			switch(i){
+				case 6:{
+				  level = level*2/3;
+				  break;
+				}
+				case 7:{
+				  level =level*3/4;
+				  break;
+				}
+				case 8:{
+				  level =level*5/6;
+				  break;
+				}
+				case 9:{
+				  level =level*11/12;
+				  break;
+				}
+				case 10:{
+				  break;
+				}
+			      case 11:{
+			        level =level*25/24;
+			        break;
+			      }
+			  }
+		     }
+		}
+	}
+	if (level > mfd->panel_info->brightness_max)
+		level = mfd->panel_info->brightness_max;
+	return level;
+}
+
 static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
 				      enum led_brightness value)
 {
@@ -251,6 +324,8 @@ static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
 
 	if (!bl_lvl && value)
 		bl_lvl = 1;
+
+	bl_lvl = set_backlight_curve(mfd, bl_lvl);
 
 	if (!IS_CALIB_MODE_BL(mfd) && (!mfd->ext_bl_ctrl || !value ||
 							!mfd->bl_level)) {
@@ -737,6 +812,67 @@ static void mdss_fb_shutdown(struct platform_device *pdev)
 	unlock_fb_info(mfd->fbi);
 }
 
+static struct msm_fb_data_type *mfd_handle = NULL;
+static int show_cabc_status = 2;
+
+static ssize_t msm_show_lcd_cabc(struct device *dev,
+				struct device_attribute *attr,char *buf)
+{
+	char* cabc_status[3] = {
+		"disable",
+		"enable",
+		"default-en"
+	};
+	
+	if (show_cabc_status == 0){
+		return snprintf(buf, 15, "%s\n",cabc_status[0]);
+	}else if (show_cabc_status == 1){
+		return snprintf(buf, 15, "%s\n",cabc_status[1]);
+	}else{
+		return snprintf(buf, 15, "%s\n",cabc_status[2]);
+	}
+}
+
+static ssize_t msm_store_lcd_cabc(struct device *dev,
+				struct device_attribute *attr,const char *buf,size_t count)
+{
+	int ret = 0;
+	unsigned long value;
+	struct mdss_panel_data *pdata;
+
+	pdata = dev_get_platdata(&mfd_handle->pdev->dev);
+	if (!pdata) {
+		pr_err("no panel connected\n");
+		return -ENODEV;
+	}
+	ret = kstrtoul(buf, 10, &value);
+	if (value == 0){
+		pdata->panel_info.cabc_enable = 0;
+	}else if(value == 1){
+		pdata->panel_info.cabc_enable = 1;
+	}else{
+		pdata->panel_info.cabc_enable = 2;
+	}
+	show_cabc_status = pdata->panel_info.cabc_enable;
+	{
+		char *envp[2] = {"PANEL_ALIVE=0", NULL};
+		if (mfd_handle != NULL){
+		ret = kobject_uevent_env(
+			&mfd_handle->fbi->dev->kobj,KOBJ_CHANGE, envp);
+		pr_debug("%s: Panel need to reset for cabc, sending uevent - %s ret = %d\n",
+						__func__, envp[0],ret);
+		}
+	}
+      return count;
+}
+
+static struct device_attribute lcd_cabc_attr =__ATTR(lcd_cabc_stats, 0644,msm_show_lcd_cabc, msm_store_lcd_cabc);
+
+void msm_panel_control_cabc(struct platform_device *pdev)
+{
+	device_create_file(&pdev->dev,&lcd_cabc_attr);
+}
+
 static int mdss_fb_probe(struct platform_device *pdev)
 {
 	struct msm_fb_data_type *mfd = NULL;
@@ -860,6 +996,11 @@ static int mdss_fb_probe(struct platform_device *pdev)
 	}
 
 	mdss_fb_set_mdp_sync_pt_threshold(mfd);
+
+	if (mfd->index == 0){
+		mfd_handle = mfd;
+		msm_panel_control_cabc(pdev);
+	}
 
 	if (mfd->mdp.splash_init_fnc)
 		mfd->mdp.splash_init_fnc(mfd);

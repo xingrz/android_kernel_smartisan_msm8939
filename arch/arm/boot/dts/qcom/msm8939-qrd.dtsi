@@ -54,6 +54,7 @@
 	};
 
 	qcom,pm8916@0 {
+		/*
 		qcom,leds@a100 {
 			status = "okay";
 			qcom,led_mpp_2 {
@@ -69,6 +70,7 @@
 				qcom,mode-ctrl = <0x60>;
 			};
 		};
+		*/
 	};
 };
 

@@ -252,6 +252,7 @@ static struct notifier_block wnb = {
 };
 
 #define NVBIN_FILE "wlan/prima/WCNSS_qcom_wlan_nv.bin"
+#define NVBIN_FILE_BAK "wlan/prima/WCNSS_qcom_wlan_nv.bin.bak"
 
 /* On SMD channel 4K of maximum data can be transferred, including message
  * header, so NV fragment size as next multiple of 1Kb is 3Kb.
@@ -2318,9 +2319,16 @@ static void wcnss_nvbin_dnld(void)
 	ret = request_firmware(&nv, NVBIN_FILE, dev);
 
 	if (ret || !nv || !nv->data || !nv->size) {
-		pr_err("wcnss: %s: request_firmware failed for %s (ret = %d)\n",
+		pr_err("wcnss: %s: request_firmware failed for %s (ret = %d), request backup\n",
 			__func__, NVBIN_FILE, ret);
-		goto out;
+
+		ret = request_firmware(&nv, NVBIN_FILE_BAK, dev);
+
+		if (ret || !nv || !nv->data || !nv->size) {
+			pr_err("wcnss: %s: request_firmware_bak failed for %s (ret = %d)\n",
+				__func__, NVBIN_FILE_BAK, ret);
+			goto out;
+		}
 	}
 
 	/* First 4 bytes in nv blob is validity bitmap.

@@ -926,6 +926,52 @@ static long msm_eeprom_subdev_fops_ioctl32(struct file *file, unsigned int cmd,
 
 #endif
 
+char *main_sensors_name = NULL;
+char *sub_sensors_name = NULL;
+static ssize_t show_camera_name(struct device *d, struct device_attribute *attr,
+			       char *buf)
+{	
+	return sprintf(buf,"%s\n",main_sensors_name);
+}
+
+static DEVICE_ATTR(camera_name, S_IRUGO | S_IROTH , show_camera_name , NULL);
+
+
+static int create_device_sysinfo(struct device *pdev)
+{
+	int rc = 0;	
+	rc = device_create_file(pdev, &dev_attr_camera_name);
+	if (rc < 0)
+		goto err_create_file;
+	
+err_create_file:
+	pr_err("[%s] createfile errno: %d\n", __func__, rc);
+	return rc;
+
+}
+
+static ssize_t show_sub_camera_name(struct device *d, struct device_attribute *attr,
+			       char *buf)
+{	
+	return sprintf(buf,"%s\n",sub_sensors_name);
+}
+
+static DEVICE_ATTR(sub_camera_name, S_IRUGO | S_IROTH , show_sub_camera_name , NULL);
+
+
+static int create_sub_device_sysinfo(struct device *pdev)
+{
+	int rc = 0;	
+	rc = device_create_file(pdev, &dev_attr_sub_camera_name);
+	if (rc < 0)
+		goto err_create_file;
+	
+err_create_file:
+	pr_err("[%s] createfile errno: %d\n", __func__, rc);
+	return rc;
+
+}
+
 static int msm_eeprom_platform_probe(struct platform_device *pdev)
 {
 	int rc = 0;
@@ -1056,7 +1102,38 @@ static int msm_eeprom_platform_probe(struct platform_device *pdev)
 	for (j = 0; j < e_ctrl->cal_data.num_data; j++)
 		CDBG("memory_data[%d] = 0x%X\n", j,
 			e_ctrl->cal_data.mapdata[j]);
+	if(!strcmp(eb_info->eeprom_name, "sunny_q13s01b")){
+		if(e_ctrl->cal_data.mapdata[2] == 0x03)
+			main_sensors_name = "s5k3l2_mcnex";
+		else if(e_ctrl->cal_data.mapdata[2] == 0x01)
+			main_sensors_name = "s5k3l2_mcnex_blue";
+		else if((e_ctrl->cal_data.mapdata[2] == 0x00) && (e_ctrl->cal_data.mapdata[3] == 0x02))
+			main_sensors_name = "s5k3l2_sharp_blue";
+		else if((e_ctrl->cal_data.mapdata[2] == 0x00) && (e_ctrl->cal_data.mapdata[3] == 0x01))
+			main_sensors_name = "s5k3l2_sharp";
+		else
+			main_sensors_name = "incorrect otp data";
+		rc = create_device_sysinfo(&e_ctrl->pdev->dev);
+		if (rc < 0){
+			pr_err("[%s] createfile erro: %d\n",__func__, rc);	
+			goto power_down;
+		}
+	}
 
+	if(!strcmp(eb_info->eeprom_name, "ofilm_ojl5f05")){
+		if(e_ctrl->cal_data.mapdata[1] == 0x13)
+			sub_sensors_name = "s5k5e2";
+		else if(e_ctrl->cal_data.mapdata[1] == 0x17)
+			sub_sensors_name = "s5k5e2_v2";
+		else
+			sub_sensors_name = "incorrect otp data";
+		rc = create_sub_device_sysinfo(&e_ctrl->pdev->dev);
+		if (rc < 0){
+			pr_err("[%s] createfile erro: %d\n",__func__, rc);	
+			goto power_down;
+		}
+	}
+		
 	e_ctrl->is_supported |= msm_eeprom_match_crc(&e_ctrl->cal_data);
 
 	rc = msm_camera_power_down(power_info, e_ctrl->eeprom_device_type,

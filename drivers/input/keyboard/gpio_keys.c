@@ -31,11 +31,14 @@
 #include <linux/spinlock.h>
 #include <linux/pinctrl/consumer.h>
 
+#define RESUME_DELAY_TIME 100
+
 struct gpio_button_data {
 	const struct gpio_keys_button *button;
 	struct input_dev *input;
 	struct timer_list timer;
 	struct work_struct work;
+	struct delayed_work ddwork;
 	unsigned int timer_debounce;	/* in msecs */
 	unsigned int irq;
 	spinlock_t lock;
@@ -46,6 +49,9 @@ struct gpio_button_data {
 struct gpio_keys_drvdata {
 	const struct gpio_keys_platform_data *pdata;
 	struct pinctrl *key_pinctrl;
+#if 0
+	struct delayed_work dwork;
+#endif
 	struct input_dev *input;
 	struct mutex disable_lock;
 	struct gpio_button_data data[0];
@@ -330,6 +336,18 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 	struct input_dev *input = bdata->input;
 	unsigned int type = button->type ?: EV_KEY;
 	int state = (gpio_get_value_cansleep(button->gpio) ? 1 : 0) ^ button->active_low;
+        int cpu_id;
+
+        cpu_id = get_cpu();
+        put_cpu();
+
+        pr_info("%s:state=%d, code=%d, type=%d, get_input_resume_state=%d, cpu_id=%d\n", __func__, state, button->code, type, get_input_resume_state(), cpu_id);
+/*
+        if (!get_input_resume_state()) {
+                pr_info("%s:the input system is not resume\n", __func__);
+                return;
+        }
+*/
 
 	if (type == EV_ABS) {
 		if (state)
@@ -344,31 +362,61 @@ static void gpio_keys_gpio_work_func(struct work_struct *work)
 {
 	struct gpio_button_data *bdata =
 		container_of(work, struct gpio_button_data, work);
+        int cpu_id;
 
+        cpu_id = get_cpu();
+        put_cpu();
+        pr_info("%s:cpu_id=%d\n", __func__, cpu_id);
 	gpio_keys_gpio_report_event(bdata);
 
 	if (bdata->button->wakeup)
 		pm_relax(bdata->input->dev.parent);
 }
 
+#if 0
 static void gpio_keys_gpio_timer(unsigned long _data)
 {
 	struct gpio_button_data *bdata = (struct gpio_button_data *)_data;
 
 	schedule_work(&bdata->work);
 }
+#endif
+
+static void gpio_keys_gpio_delayed(struct work_struct *work)
+{
+        struct delayed_work *ddwork = to_delayed_work(work);
+        struct gpio_button_data *bdata = container_of(ddwork, struct gpio_button_data, ddwork);
+        int cpu_id;
+
+        cpu_id = get_cpu();
+        put_cpu();
+        pr_info("%s:cpu_id=%d\n", __func__, cpu_id);
+	gpio_keys_gpio_report_event(bdata);
+
+	if (bdata->button->wakeup)
+		pm_relax(bdata->input->dev.parent);
+}
 
 static irqreturn_t gpio_keys_gpio_isr(int irq, void *dev_id)
 {
 	struct gpio_button_data *bdata = dev_id;
+        int cpu_id;
 
 	BUG_ON(irq != bdata->irq);
 
+        cpu_id = get_cpu();
+        put_cpu();
+        pr_info("%s:wakeup=%d, debounce=%d, cpu_id=%d, irq=%d, gpio=%d, state=%d\n", __func__, bdata->button->wakeup, bdata->timer_debounce, cpu_id, irq, bdata->button->gpio, gpio_get_value(bdata->button->gpio));
 	if (bdata->button->wakeup)
 		pm_stay_awake(bdata->input->dev.parent);
 	if (bdata->timer_debounce)
+        {
+#if 0
 		mod_timer(&bdata->timer,
 			jiffies + msecs_to_jiffies(bdata->timer_debounce));
+#endif
+                schedule_delayed_work_on(cpu_id, &bdata->ddwork, msecs_to_jiffies(bdata->timer_debounce));
+        }
 	else
 		schedule_work(&bdata->work);
 
@@ -469,8 +517,11 @@ static int gpio_keys_setup_key(struct platform_device *pdev,
 		bdata->irq = irq;
 
 		INIT_WORK(&bdata->work, gpio_keys_gpio_work_func);
+#if 0
 		setup_timer(&bdata->timer,
 			    gpio_keys_gpio_timer, (unsigned long)bdata);
+#endif
+                INIT_DELAYED_WORK(&bdata->ddwork, gpio_keys_gpio_delayed);
 
 		isr = gpio_keys_gpio_isr;
 		irqflags = IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING;
@@ -722,6 +773,25 @@ static void gpio_remove_key(struct gpio_button_data *bdata)
 		gpio_free(bdata->button->gpio);
 }
 
+#if 0
+static void keys_resume_work(struct work_struct *work)
+{
+        struct delayed_work *dwork = to_delayed_work(work);
+	struct gpio_keys_drvdata *ddata =
+                container_of(dwork, struct gpio_keys_drvdata, dwork);
+
+	gpio_keys_report_state(ddata);
+        if (get_input_resume_state()) {
+                set_input_resume_state(0);
+                pr_debug("%s:the input system is resumed\n", __func__);
+                return;
+        } else {
+                schedule_delayed_work(&ddata->dwork,
+                                msecs_to_jiffies(RESUME_DELAY_TIME));
+        }
+}
+#endif
+
 static int gpio_keys_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -799,6 +869,9 @@ static int gpio_keys_probe(struct platform_device *pdev)
 		if (button->wakeup)
 			wakeup = 1;
 	}
+#if 0
+        INIT_DELAYED_WORK(&ddata->dwork, keys_resume_work);
+#endif
 
 	error = sysfs_create_group(&pdev->dev.kobj, &gpio_keys_attr_group);
 	if (error) {
@@ -807,6 +880,7 @@ static int gpio_keys_probe(struct platform_device *pdev)
 		goto fail2;
 	}
 
+        set_input_resume_state(1);
 	error = input_register_device(input);
 	if (error) {
 		dev_err(dev, "Unable to register input device, error: %d\n",
@@ -876,6 +950,7 @@ static int gpio_keys_suspend(struct device *dev)
 	struct input_dev *input = ddata->input;
 	int i, ret;
 
+        input->is_resumed = 0;
 	if (ddata->key_pinctrl) {
 		ret = gpio_keys_pinctrl_configure(ddata, false);
 		if (ret) {
@@ -907,6 +982,8 @@ static int gpio_keys_resume(struct device *dev)
 	int error = 0;
 	int i;
 
+        pr_info("%s:input->is_resumed=%d\n", __func__, input->is_resumed);
+        input->dev.type->pm->resume(&(input->dev));
 	if (ddata->key_pinctrl) {
 		error = gpio_keys_pinctrl_configure(ddata, true);
 		if (error) {
@@ -931,7 +1008,12 @@ static int gpio_keys_resume(struct device *dev)
 	if (error)
 		return error;
 
+        input->is_resumed = 1;
 	gpio_keys_report_state(ddata);
+#if 0
+        schedule_delayed_work(&ddata->dwork,
+                        msecs_to_jiffies(RESUME_DELAY_TIME));
+#endif
 	return 0;
 }
 #endif

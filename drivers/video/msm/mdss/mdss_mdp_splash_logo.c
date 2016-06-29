@@ -32,6 +32,19 @@
 #define INVALID_PIPE_INDEX 0xFFFF
 #define MAX_FRAME_DONE_COUNT_WAIT 2
 
+/* check androidboot.mode = charger */
+static bool boot_usb = false;
+static int __init early_boot_mode(char *str)
+{
+    if (str != NULL) {
+        boot_usb = true;
+    } else {
+        boot_usb = false;
+    }
+    return 0;
+}
+early_param("androidboot.mode", early_boot_mode);
+
 static int mdss_mdp_splash_alloc_memory(struct msm_fb_data_type *mfd,
 							uint32_t size)
 {
@@ -577,6 +590,13 @@ static __ref int mdss_mdp_splash_parse_dt(struct msm_fb_data_type *mfd)
 	mfd->splash_info.splash_logo_enabled =
 				of_property_read_bool(pdev->dev.of_node,
 				"qcom,mdss-fb-splash-logo-enabled");
+
+	if (boot_usb)
+		mfd->splash_info.splash_logo_enabled = false;
+
+#ifdef CONFIG_SPLASH_BLACK_CMCC
+        mfd->splash_info.splash_logo_enabled = false;
+#endif
 
 	of_find_property(pdev->dev.of_node, "qcom,memblock-reserve", &len);
 	if (len) {

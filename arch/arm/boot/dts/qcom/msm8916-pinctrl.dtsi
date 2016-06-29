@@ -30,7 +30,7 @@
 			};
 		};
 
-		ext-cdc-tlmm-lines {
+/*		ext-cdc-tlmm-lines {
 			qcom,pins = <&gp 116>, <&gp 112>, <&gp 117>,
 						<&gp 118>, <&gp 119>;
 			qcom,num-grp-pins = <5>;
@@ -45,6 +45,7 @@
 				bias-disable;
 			};
 		};
+*/
 
 		ext-codec-lines {
 			qcom,pins = <&gp 67>;
@@ -123,7 +124,7 @@
 			};
 		};
 
-		cross-conn-det {
+/*		cross-conn-det {
 			qcom,pins = <&gp 120>;
 			qcom,num-grp-pins = <1>;
 			qcom,pin-func = <0>;
@@ -138,6 +139,7 @@
 				bias-disable;
 			};
 		};
+*/
 		pmx-uartconsole {
 			qcom,pins = <&gp 4>, <&gp 5>;
 			qcom,num-grp-pins = <2>;

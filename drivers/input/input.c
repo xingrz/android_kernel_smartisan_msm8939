@@ -40,6 +40,7 @@ static DEFINE_IDA(input_ida);
 static LIST_HEAD(input_dev_list);
 static LIST_HEAD(input_handler_list);
 
+static int is_input_resume;
 /*
  * input_mutex protects access to both input_dev_list and input_handler_list.
  * This also causes input_[un]register_device and input_[un]register_handler
@@ -1674,6 +1675,17 @@ void input_reset_device(struct input_dev *dev)
 	mutex_unlock(&dev->mutex);
 }
 EXPORT_SYMBOL(input_reset_device);
+int get_input_resume_state(void)
+{
+        return is_input_resume;
+}
+EXPORT_SYMBOL(get_input_resume_state);
+
+void set_input_resume_state(int state)
+{
+        is_input_resume = state;
+}
+EXPORT_SYMBOL(set_input_resume_state);
 
 #ifdef CONFIG_PM
 static int input_dev_suspend(struct device *dev)
@@ -1684,6 +1696,9 @@ static int input_dev_suspend(struct device *dev)
 
 	if (input_dev->users)
 		input_dev_toggle(input_dev, false);
+        if (!strcmp(input_dev->name, "gpio-keys")) {
+                set_input_resume_state(0);
+        }
 
 	mutex_unlock(&input_dev->mutex);
 
@@ -1694,7 +1709,12 @@ static int input_dev_resume(struct device *dev)
 {
 	struct input_dev *input_dev = to_input_dev(dev);
 
+        if (input_dev->is_resumed)
+                return 0;
 	input_reset_device(input_dev);
+        if (!strcmp(input_dev->name, "gpio-keys")) {
+                set_input_resume_state(1);
+        }
 
 	return 0;
 }
@@ -1747,6 +1767,7 @@ struct input_dev *input_allocate_device(void)
 		device_initialize(&dev->dev);
 		mutex_init(&dev->mutex);
 		spin_lock_init(&dev->event_lock);
+                dev->is_resumed = 0;
 		INIT_LIST_HEAD(&dev->h_list);
 		INIT_LIST_HEAD(&dev->node);
 

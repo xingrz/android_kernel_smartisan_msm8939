@@ -128,7 +128,7 @@ config IPC_LOGGING
 
 config TRACING
 	bool
-	select DEBUG_FS
+	depends on DEBUG_FS
 	select RING_BUFFER
 	select STACKTRACE if STACKTRACE_SUPPORT
 	select TRACEPOINTS
@@ -139,6 +139,7 @@ config TRACING
 
 config GENERIC_TRACER
 	bool
+	depends on DEBUG_FS
 	select TRACING
 
 #
@@ -171,6 +172,7 @@ config FUNCTION_TRACER
 	select KALLSYMS
 	select GENERIC_TRACER
 	select CONTEXT_SWITCH_TRACER
+	default y
 	help
 	  Enable the kernel to trace every kernel function. This is done
 	  by using a compiler feature to insert a small, 5-byte No-Operation

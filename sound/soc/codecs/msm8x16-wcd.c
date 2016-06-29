@@ -1497,6 +1497,41 @@ static uint32_t get_iir_band_coeff(struct snd_soc_codec *codec,
 
 }
 
+static int micbias1_capless_control_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	u8 micbias1_capless;
+	int rc = 0;
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+
+	dev_info(codec->dev, "%s: ucontrol->value.integer.value[0]  = %ld\n",
+			 __func__, ucontrol->value.integer.value[0]);
+
+	switch (ucontrol->value.integer.value[0]) {
+	case 0:
+		micbias1_capless = ucontrol->value.integer.value[0];
+		snd_soc_update_bits(codec,MSM8X16_WCD_A_ANALOG_MICB_1_EN,0x47,0x00);
+		break;
+	case 1:
+		micbias1_capless = ucontrol->value.integer.value[0];
+		snd_soc_update_bits(codec,MSM8X16_WCD_A_ANALOG_MICB_1_EN,0x47,0x46);
+		break;
+	default:
+		rc = -EINVAL;
+		break;
+	}
+	dev_info(codec->dev, "%s:MICB_1_EN:0x%x\n",__func__,snd_soc_read(codec,MSM8X16_WCD_A_ANALOG_MICB_1_EN));
+	return rc;
+}
+static int micbias1_capless_control_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	int rc = 0;
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	dev_dbg(codec->dev, "%s\n", __func__);
+	return rc;
+}
+
 static int msm8x16_wcd_get_iir_band_audio_mixer(
 					struct snd_kcontrol *kcontrol,
 					struct snd_ctl_elem_value *ucontrol)
@@ -1720,6 +1755,12 @@ static const struct snd_kcontrol_new msm8x16_wcd_snd_controls[] = {
 	SOC_SINGLE_SX_TLV("IIR2 INP1 Volume",
 			  MSM8X16_WCD_A_CDC_IIR2_GAIN_B1_CTL,
 			0,  -84, 40, digital_gain),
+
+	SOC_SINGLE("MICBIAS CAPLESS Switch",
+		   MSM8X16_WCD_A_ANALOG_MICB_1_EN, 6, 1, 0),
+
+	SOC_SINGLE_EXT("MICBIAS1 CAPLESS Switch", SND_SOC_NOPM, 0, 1, 0,
+		micbias1_capless_control_get, micbias1_capless_control_put),
 
 	SOC_ENUM("TX1 HPF cut off", cf_dec1_enum),
 	SOC_ENUM("TX2 HPF cut off", cf_dec2_enum),
@@ -2523,7 +2564,33 @@ static int msm8x16_wcd_enable_ext_mb_source(struct snd_soc_codec *codec,
 
 	return ret;
 }
+#if 0
+static int msm8x16_wcd_codec_enable_external_micbias(struct snd_soc_dapm_widget *w,
+	struct snd_kcontrol *kcontrol, int event)
+{
+	struct snd_soc_codec *codec = w->codec;
 
+	dev_info(codec->dev, "%s %d,micb_1_en:0x%x\n", __func__, event,snd_soc_read(codec,MSM8X16_WCD_A_ANALOG_MICB_1_EN));
+
+	switch (event) {
+	case SND_SOC_DAPM_PRE_PMU:
+		snd_soc_update_bits(codec,
+				MSM8X16_WCD_A_ANALOG_MICB_1_EN, 0x80, 0x80);
+		break;
+	case SND_SOC_DAPM_POST_PMU:
+		usleep_range(100000, 100100);
+		dev_info(codec->dev, "%s :SND_SOC_DAPM_POST_PMU delay 20ms\n", __func__);
+		break;
+	case SND_SOC_DAPM_POST_PMD:
+		snd_soc_update_bits(codec, MSM8X16_WCD_A_ANALOG_MICB_1_EN,
+				0x80, 0x00);
+		usleep_range(30000, 30100);
+		break;
+	}
+	dev_info(codec->dev, "%s end; micb_1_en:0x%x\n", __func__,snd_soc_read(codec,MSM8X16_WCD_A_ANALOG_MICB_1_EN));
+	return 0;
+}
+#endif
 static int msm8x16_wcd_codec_enable_micbias(struct snd_soc_dapm_widget *w,
 	struct snd_kcontrol *kcontrol, int event)
 {
@@ -4037,8 +4104,10 @@ static int msm8x16_wcd_device_down(struct snd_soc_codec *codec)
 	struct msm8x16_wcd_priv *msm8x16_wcd_priv =
 		snd_soc_codec_get_drvdata(codec);
 
+	dev_info(codec->dev, "%s: device down!\n", __func__);
+
 	pdata = snd_soc_card_get_drvdata(codec->card);
-	dev_dbg(codec->dev, "%s: device down!\n", __func__);
+//	dev_dbg(codec->dev, "%s: device down!\n", __func__);
 	msm8x16_wcd_write(codec,
 		MSM8X16_WCD_A_ANALOG_TX_1_EN, 0x3);
 	msm8x16_wcd_write(codec,
@@ -4059,9 +4128,11 @@ static int msm8x16_wcd_device_down(struct snd_soc_codec *codec)
 
 	msm8x16_wcd_write(codec, MSM8X16_WCD_A_DIGITAL_PERPH_RESET_CTL4, 0x1);
 	msm8x16_wcd_write(codec, MSM8X16_WCD_A_ANALOG_PERPH_RESET_CTL4, 0x1);
+	wcd_mbhc_stop(&msm8x16_wcd_priv->mbhc);
 	atomic_set(&pdata->mclk_enabled, false);
 	set_bit(BUS_DOWN, &msm8x16_wcd_priv->status_mask);
 	snd_soc_card_change_online_state(codec->card, 0);
+	dev_info(codec->dev, "%s: device down end\n", __func__);
 	return 0;
 }
 
@@ -4070,7 +4141,7 @@ static int msm8x16_wcd_device_up(struct snd_soc_codec *codec)
 	struct msm8x16_wcd_priv *msm8x16_wcd_priv =
 		snd_soc_codec_get_drvdata(codec);
 	u32 reg;
-	dev_dbg(codec->dev, "%s: device up!\n", __func__);
+	dev_info(codec->dev, "%s: device up!\n", __func__);
 
 	mutex_lock(&codec->mutex);
 
@@ -4082,7 +4153,7 @@ static int msm8x16_wcd_device_up(struct snd_soc_codec *codec)
 				reg, msm8x16_wcd_reset_reg_defaults[reg]);
 
 	if (codec->reg_def_copy) {
-		pr_debug("%s: Update ASOC cache", __func__);
+		pr_info("%s: Update ASOC cache", __func__);
 		kfree(codec->reg_cache);
 		codec->reg_cache = kmemdup(codec->reg_def_copy,
 						codec->reg_size, GFP_KERNEL);
@@ -4105,12 +4176,12 @@ static int msm8x16_wcd_device_up(struct snd_soc_codec *codec)
 
 	msm8x16_wcd_set_micb_v(codec);
 	msm8x16_wcd_configure_cap(codec, false, false);
-	wcd_mbhc_stop(&msm8x16_wcd_priv->mbhc);
+//	wcd_mbhc_stop(&msm8x16_wcd_priv->mbhc);
 	wcd_mbhc_start(&msm8x16_wcd_priv->mbhc,
 			msm8x16_wcd_priv->mbhc.mbhc_cfg);
 
 	mutex_unlock(&codec->mutex);
-
+	dev_info(codec->dev, "%s: device up end\n", __func__);
 	return 0;
 }
 
@@ -4124,26 +4195,26 @@ static int modem_state_callback(struct notifier_block *nb, unsigned long value,
 		msm8x16_wcd_device_down(registered_codec);
 	else if (value == SUBSYS_AFTER_POWERUP) {
 
-		dev_dbg(registered_codec->dev,
+		dev_info(registered_codec->dev,
 			"ADSP is about to power up. bring up codec\n");
 
 		if (!q6core_is_adsp_ready()) {
-			dev_dbg(registered_codec->dev,
+			dev_info(registered_codec->dev,
 				"ADSP isn't ready\n");
 			timeout = jiffies +
 				  msecs_to_jiffies(ADSP_STATE_READY_TIMEOUT_MS);
 			while (!(timedout = time_after(jiffies, timeout))) {
 				if (!q6core_is_adsp_ready()) {
-					dev_dbg(registered_codec->dev,
+					dev_info(registered_codec->dev,
 						"ADSP isn't ready\n");
 				} else {
-					dev_dbg(registered_codec->dev,
+					dev_info(registered_codec->dev,
 						"ADSP is ready\n");
 					break;
 				}
 			}
 		} else {
-			dev_dbg(registered_codec->dev,
+			dev_info(registered_codec->dev,
 				"%s: DSP is ready\n", __func__);
 		}
 

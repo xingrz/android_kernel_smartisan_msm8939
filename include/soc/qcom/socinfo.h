@@ -53,6 +53,11 @@
 #define machine_is_apq8074()	of_machine_is_compatible("qcom,apq8074")
 #define machine_is_msm8926()	of_machine_is_compatible("qcom,msm8926")
 
+/* Smartisan u1 reserved start */
+#define machine_is_msm8939()	of_machine_is_compatible("qcom,msm8939")
+#define of_board_is_u1()    	of_machine_is_compatible("qcom,u1")
+/* Smartisan u1 reserved end */
+
 #define early_machine_is_msm8610()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msm8610")
 #define early_machine_is_msm8909()	\

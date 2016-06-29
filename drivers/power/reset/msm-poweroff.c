@@ -104,6 +104,12 @@ static void set_dload_mode(int on)
 {
 	int ret;
 
+	if (on == 2) {
+		__raw_writel(2, dload_mode_addr + sizeof(unsigned int) * 3);
+	} else if (on == 3) {
+		__raw_writel(0, dload_mode_addr + sizeof(unsigned int) * 3);
+	}
+
 	if (dload_mode_addr) {
 		__raw_writel(on ? 0xE47B337D : 0, dload_mode_addr);
 		__raw_writel(on ? 0xCE14091A : 0,
@@ -151,20 +157,14 @@ static void enable_emergency_dload_mode(void)
 static int dload_set(const char *val, struct kernel_param *kp)
 {
 	int ret;
-	int old_val = download_mode;
 
 	ret = param_set_int(val, kp);
 
 	if (ret)
 		return ret;
 
-	/* If download_mode is not zero or one, ignore. */
-	if (download_mode >> 1) {
-		download_mode = old_val;
-		return -EINVAL;
-	}
-
 	set_dload_mode(download_mode);
+	download_mode = !!download_mode;
 
 	return 0;
 }

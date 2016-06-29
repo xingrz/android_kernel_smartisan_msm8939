@@ -2567,7 +2567,7 @@ get_prop_batt_status(struct qpnp_chg_chip *chip)
 		qpnp_chg_is_dc_chg_plugged_in(chip)) &&
 		(chip->chg_done || get_batt_capacity(chip) == 100)
 		&& qpnp_chg_is_boost_en_set(chip) == 0) {
-		return POWER_SUPPLY_STATUS_FULL;
+			return POWER_SUPPLY_STATUS_FULL;
 	}
 
 	return POWER_SUPPLY_STATUS_DISCHARGING;

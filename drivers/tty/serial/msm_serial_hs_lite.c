@@ -1990,7 +1990,7 @@ static void __exit msm_serial_hsl_exit(void)
 	uart_unregister_driver(&msm_hsl_uart_driver);
 }
 
-module_init(msm_serial_hsl_init);
+fs_initcall(msm_serial_hsl_init);
 module_exit(msm_serial_hsl_exit);
 
 MODULE_DESCRIPTION("Driver for msm HSUART serial device");

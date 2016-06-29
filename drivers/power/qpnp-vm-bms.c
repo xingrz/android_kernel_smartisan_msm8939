@@ -118,7 +118,7 @@
 #define CV_DROP_MARGIN			10000
 #define MIN_OCV_UV			2000000
 #define TIME_PER_PERCENT_UUC		60
-#define IAVG_SAMPLES			16
+#define IAVG_SAMPLES			6
 #define MIN_SOC_UUC			3
 
 #define QPNP_VM_BMS_DEV_NAME		"qcom,qpnp-vm-bms"
@@ -1433,7 +1433,8 @@ static int report_eoc(struct qpnp_bms_chip *chip)
 
 	return rc;
 }
-
+extern bool charger_in;
+#define RECHARGE_LIMIT 4375000
 static void check_recharge_condition(struct qpnp_bms_chip *chip)
 {
 	int rc;
@@ -1443,13 +1444,17 @@ static void check_recharge_condition(struct qpnp_bms_chip *chip)
 	if (chip->last_soc > chip->dt.cfg_soc_resume_limit)
 		return;
 
+	if ((100 == chip->dt.cfg_soc_resume_limit) && (chip->last_ocv_uv >= RECHARGE_LIMIT))
+		return;
+
 	if (status == POWER_SUPPLY_STATUS_UNKNOWN) {
 		pr_debug("Unable to read battery status\n");
 		return;
 	}
 
 	/* Report recharge to charger for SOC based resume of charging */
-	if ((status != POWER_SUPPLY_STATUS_CHARGING) && chip->eoc_reported) {
+	if (((status != POWER_SUPPLY_STATUS_CHARGING) || charger_in) && chip->eoc_reported) {
+		charger_in = false;
 		ret.intval = POWER_SUPPLY_STATUS_CHARGING;
 		rc = chip->batt_psy->set_property(chip->batt_psy,
 				POWER_SUPPLY_PROP_STATUS, &ret);

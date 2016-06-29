@@ -1337,7 +1337,7 @@ static void *def_msm8x16_wcd_mbhc_cal(void)
 	}
 
 #define S(X, Y) ((WCD_MBHC_CAL_PLUG_TYPE_PTR(msm8x16_wcd_cal)->X) = (Y))
-	S(v_hs_max, 1500);
+	S(v_hs_max, 1700);
 #undef S
 #define S(X, Y) ((WCD_MBHC_CAL_BTN_DET_PTR(msm8x16_wcd_cal)->X) = (Y))
 	S(num_btn, WCD_MBHC_DEF_BUTTONS);
@@ -1360,16 +1360,16 @@ static void *def_msm8x16_wcd_mbhc_cal(void)
 	 * 210-290 == Button 2
 	 * 360-680 == Button 3
 	 */
-	btn_low[0] = 75;
-	btn_high[0] = 75;
-	btn_low[1] = 150;
-	btn_high[1] = 150;
-	btn_low[2] = 237;
-	btn_high[2] = 237;
+	btn_low[0] =112;
+	btn_high[0] = 112;
+	btn_low[1] = 275;
+	btn_high[1] = 275;
+	btn_low[2] = 425;
+	btn_high[2] = 425;
 	btn_low[3] = 450;
 	btn_high[3] = 450;
-	btn_low[4] = 500;
-	btn_high[4] = 500;
+	btn_low[4] = 525;
+	btn_high[4] = 525;
 
 	return msm8x16_wcd_cal;
 }
@@ -2318,6 +2318,7 @@ static void msm8x16_dt_parse_cap_info(struct platform_device *pdev,
 	pdata->micbias1_cap_mode =
 		(of_property_read_bool(pdev->dev.of_node, ext1_cap) ?
 		MICBIAS_EXT_BYP_CAP : MICBIAS_NO_EXT_BYP_CAP);
+	pdata->micbias1_cap_mode = MICBIAS_NO_EXT_BYP_CAP;
 
 	pdata->micbias2_cap_mode =
 		(of_property_read_bool(pdev->dev.of_node, ext2_cap) ?
