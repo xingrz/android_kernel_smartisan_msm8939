@@ -699,13 +699,53 @@ msm_get_hw_platform(struct device *dev,
 			hw_platform[hw_type]);
 }
 
+#define MAJOR_NUM 4
+#ifdef CONFIG_VENDOR_SMARTISAN
+static char* format_hw_version(uint32_t ver) {
+	char *major_str[MAJOR_NUM] = {
+		"EVT",
+		"DVT",
+		"PVT",
+		"MP",
+	};
+	static char ver_str[20];
+	uint8_t minor1, minor2, major;
+	uint8_t major0;
+
+	// add for 8115 cdma
+	major0 = (uint8_t)(ver >> 8 & 0xff) - 1;
+		if (major0 < 10) {
+				major = major0;
+		} else if (major0 < 20) {
+				major = major0 % 10;
+		} else {
+				major = major0 % 20;
+		}
+	minor1 = (uint8_t)(ver >> 4 & 0xf) + 1;
+	minor2 = (uint8_t)(ver & 0xf);
+
+	if (MAJOR_NUM > major) {
+		sprintf(ver_str, "%s%d.%d(%05x)",
+			major_str[major], minor1, minor2, ver);
+	} else {
+		sprintf(ver_str, "UNKNOW(%05x)", ver);
+	}
+	return ver_str;
+}
+#endif
+
 static ssize_t
 msm_get_platform_version(struct device *dev,
 				struct device_attribute *attr,
 				char *buf)
 {
+#ifdef CONFIG_VENDOR_SMARTISAN
+	return snprintf(buf, PAGE_SIZE, "%s\n",
+		format_hw_version(socinfo_get_platform_version()));
+#else
 	return snprintf(buf, PAGE_SIZE, "%u\n",
 		socinfo_get_platform_version());
+#endif
 }
 
 static ssize_t
