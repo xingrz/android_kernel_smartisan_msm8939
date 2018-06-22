@@ -153,6 +153,9 @@ enum msm_actuator_addr_type {
 enum msm_actuator_write_type {
 	MSM_ACTUATOR_WRITE_HW_DAMP,
 	MSM_ACTUATOR_WRITE_DAC,
+#ifdef CONFIG_VENDOR_SMARTISAN
+	MSM_ACTUATOR_WRITE_DAC_DW9719,
+#endif
 };
 
 enum msm_actuator_i2c_operation {
