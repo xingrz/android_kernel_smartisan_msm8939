@@ -340,6 +340,11 @@ struct mdss_dsi_ctrl_pdata {
 	int rst_gpio;
 	int disp_en_gpio;
 	int bklt_en_gpio;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	int vdd_gpio;
+	int vendor_id_gpio;
+	int com_flag;
+#endif
 	int mode_gpio;
 	int bklt_ctrl;	/* backlight ctrl */
 	bool pwm_pmi;
@@ -498,6 +503,11 @@ int mdss_panel_get_dst_fmt(u32 bpp, char mipi_mode, u32 pixel_packing,
 
 int mdss_dsi_register_recovery_handler(struct mdss_dsi_ctrl_pdata *ctrl,
 		struct mdss_intf_recovery *recovery);
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+void msm_panel_vendor_show(struct platform_device *pdev);
+int mdss_dsi_panel_power_vdd(struct mdss_panel_data *pdata, int enable);
+#endif
 
 static inline const char *__mdss_dsi_pm_name(enum dsi_pm_type module)
 {

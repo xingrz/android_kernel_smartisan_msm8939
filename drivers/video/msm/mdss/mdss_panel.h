@@ -414,6 +414,10 @@ struct mdss_panel_info {
 
 	bool is_prim_panel;
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+	int cabc_enable;
+#endif
+
 	char panel_name[MDSS_MAX_PANEL_LEN];
 	struct mdss_mdp_pp_tear_check te;
 
