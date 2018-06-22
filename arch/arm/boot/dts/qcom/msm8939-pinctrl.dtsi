@@ -315,34 +315,33 @@
 			};
 		};
 
+/*
 		 spi0_active {
-                        /* MOSI, MISO, CLK */
                         qcom,pins = <&gp 8>, <&gp 9>, <&gp 11>;
                         qcom,num-grp-pins = <3>;
                         qcom,pin-func = <1>;
                         label = "spi0-active";
-                        /* active state */
+
                         spi0_default: spi0_default {
-                                drive-strength = <12>; /* 12 MA */
-                                bias-disable = <0>; /* No PULL */
+                                drive-strength = <12>;
+                                bias-disable = <0>;
                         };
                 };
 
                 spi0_suspend {
-                        /* MOSI, MISO, CLK */
+
                         qcom,pins = <&gp 8>, <&gp 9>, <&gp 11>;
                         qcom,num-grp-pins = <3>;
                         qcom,pin-func = <0>;
                         label = "spi0-suspend";
-                        /* suspended state */
+
                         spi0_sleep: spi0_sleep {
-                                drive-strength = <2>; /* 2 MA */
-			        bias-pull-down; /* PULL Down */
+                                drive-strength = <2>;
+			        bias-pull-down;
                         };
                 };
 
                 spi0_cs0_active {
-                        /* CS */
                         qcom,pins = <&gp 10>;
                         qcom,num-grp-pins = <1>;
                         qcom,pin-func = <1>;
@@ -354,7 +353,6 @@
                 };
 
                 spi0_cs0_suspend {
-                        /* CS */
                         qcom,pins = <&gp 10>;
                         qcom,num-grp-pins = <1>;
                         qcom,pin-func = <0>;
@@ -364,6 +362,7 @@
                                 bias-disable = <0>;
                         };
                 };
+*/
 
 		wcnss_pmux_5wire: wcnss_pmux_5wire {
 			/* Uses general purpose pins */
@@ -678,7 +677,7 @@
 			};
 		};
 
-		ext-cdc-tlmm-lines {
+/*		ext-cdc-tlmm-lines {
 			qcom,pins = <&gp 116>, <&gp 112>, <&gp 117>,
 					<&gp 118>, <&gp 119>;
 			qcom,num-grp-pins = <5>;
@@ -692,6 +691,7 @@
 				bias-disable;
 			};
 		};
+*/
 
 		cdc_slim_lines {
 			qcom,pins = <&gp 63>;
@@ -725,7 +725,7 @@
 			};
 		};
 
-		cross-conn-det {
+/*		cross-conn-det {
 			qcom,pins = <&gp 120>;
 			qcom,num-grp-pins = <1>;
 			qcom,pin-func = <0>;
@@ -740,6 +740,7 @@
 				bias-disable;
 			};
 		};
+*/
 
 		pmx_mdss: pmx_mdss {
 			label = "mdss-pins";
@@ -1235,7 +1236,7 @@
 			};
 		};
 
-		tpiu_seta_15 {
+/*		tpiu_seta_15 {
 			qcom,pins = <&gp 112>;
 			qcom,num-grp-pins = <1>;
 			qcom,pin-func = <6>;
@@ -1245,6 +1246,7 @@
 				bias-disable;
 			};
 		};
+*/
 
 		tpiu_seta_16 {
 			qcom,pins = <&gp 113>;
@@ -1455,7 +1457,7 @@
 			};
 		};
 
-		tpiu_setb_17 {
+/*		tpiu_setb_17 {
 			qcom,pins = <&gp 120>;
 			qcom,num-grp-pins = <1>;
 			qcom,pin-func = <10>;
@@ -1465,8 +1467,9 @@
 				bias-disable;
 			};
 		};
+*/
 
-		tpiu_setb_18 {
+/*		tpiu_setb_18 {
 			qcom,pins = <&gp 121>;
 			qcom,num-grp-pins = <1>;
 			qcom,pin-func = <11>;
@@ -1476,6 +1479,7 @@
 				bias-disable;
 			};
 		};
+*/
 
 		uicc-active {
 			qcom,pins = <&gp 53>, <&gp 54>;

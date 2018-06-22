@@ -15,11 +15,45 @@
 #include "msm8939.dtsi"
 #include "msm8939-qrd-skuk.dtsi"
 #include "dsi-panel-nt35596-1080p-skuk-video.dtsi"
+#include "u1-msm8939-special-p1.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. MSM8939 QRD SKUK";
-	compatible = "qcom,msm8939-qrd-skuk", "qcom,msm8939-qrd", "qcom,msm8939", "qcom,qrd";
-	qcom,board-id = <0x1000b 5>, <0x2000b 5>;
+	model = "Qualcomm Technologies, Inc. MSM8939 QRD SKUK, Smartisan U1, Android 5.1";
+	compatible = "qcom,msm8939-qrd-skuk", "qcom,msm8939-qrd", "qcom,msm8939",
+			   "qcom,qrd", "u1-msm8939", "qcom,u1";
+
+	qcom,board-id = <0x17 0x01>, <0x1000b 5>, <0x2000b 5>, <0x20117 0x01>, <0x21017 0x01>, <0x21217 0x01>, <0x30017 0x01>, <0x40017 0x01>;
+};
+
+&i2c_0 { /* BLSP1 QUP2 */
+        taos@39 {
+                compatible = "taos,tmd27723";
+                reg = <0x39>;
+                pinctrl-names = "default","sleep";
+                pinctrl-0 = <&tmd27723_default>;
+                pinctrl-1 = <&tmd27723_sleep>;
+                interrupt-parent = <&msm_gpio>;
+                interrupts = <113 0x2002>;
+                vdd-supply = <&pm8916_l17>;
+                vio-supply = <&pm8916_l6>;
+                taos,irq-gpio = <&msm_gpio 113 0x2002>;
+        };
+        akm09911@0c {
+                compatible = "akm,akm09911";
+                reg = <0x0c>;
+                vdd-supply = <&pm8916_l17>;
+                vio-supply = <&pm8916_l6>;
+                akm,layout = <0x5>;
+                akm09911,auto-report;
+        };
+	mpu6050@68 {
+		compatible = "invn,mpu6050";
+		reg = <0x68>;
+		vdd-supply = <&pm8916_l17>;
+		vlogic-supply = <&pm8916_l16>;
+		vi2c-supply = <&pm8916_l6>;
+		invn,place = "Portrait Up Back Side";
+	};
 };
 
 /*
@@ -70,7 +104,7 @@
 	};
 };
 */
-
+/*
 &i2c_4 {
 	smb1360_otg_supply: smb1360-chg-fg@14 {
 		compatible = "qcom,smb1360-chg-fg";
@@ -102,15 +136,15 @@
 		qcom,cold-bat-decidegc = <(-150)>;
 	};
 };
-
+*/
 &pm8916_chg {
 	status = "ok";
-	qcom,use-external-charger;
+/*	qcom,use-external-charger; */
 };
 
 &pm8916_bms {
 	status = "ok";
-	qcom,disable-bms;
+/*	qcom,disable-bms; */
 };
 
 /*
@@ -148,12 +182,12 @@
 };
 
 &dsi_nt35596_1080p_skuk_video {
-	//qcom,cont-splash-enabled;
+	qcom,cont-splash-enabled;
 	qcom,esd-check-enabled;
 	qcom,mdss-dsi-pan-enable-dynamic-fps;
 	qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode";
 };*/
-
+/*
 &usb_otg {
        qcom,hsusb-otg-mode = <3>;
        qcom,usbid-gpio = <&msm_gpio 110 0>;
@@ -161,4 +195,4 @@
        pinctrl-0 = <&usbid_default>;
        vbus_otg-supply = <&smb1360_otg_supply>;
 };
-
+*/
