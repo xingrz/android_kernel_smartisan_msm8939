@@ -35,7 +35,7 @@
 				&ext_cdc_tlmm_lines_act>;
 		pinctrl-3 = <&cdc_slim_lines_sus &cross_conn_det_sus
 				&ext_cdc_tlmm_lines_sus>;
-		qcom,cdc-us-euro-gpios = <&msm_gpio 120 0>;
+	/*	qcom,cdc-us-euro-gpios = <&msm_gpio 120 0>; */
 		qcom,headset-jack-type-NC;
 		qcom,audio-routing =
 			"RX_BIAS", "MCLK",
@@ -99,7 +99,7 @@
 		pinctrl-1 = <&cdc_slim_lines_sus>;
 		pinctrl-2 = <&cross_conn_det_act>;
 		pinctrl-3 = <&cross_conn_det_sus>;
-		qcom,cdc-us-euro-gpios = <&msm_gpio 120 0>;
+	/*	qcom,cdc-us-euro-gpios = <&msm_gpio 120 0>;	*/
 		qcom,headset-jack-type-NC;
 		qcom,audio-routing =
 			"RX_BIAS", "MCLK",
