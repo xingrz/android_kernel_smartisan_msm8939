@@ -1497,6 +1497,47 @@ static uint32_t get_iir_band_coeff(struct snd_soc_codec *codec,
 
 }
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+static int micbias1_capless_control_put(
+					struct snd_kcontrol *kcontrol,
+					struct snd_ctl_elem_value *ucontrol)
+{
+	u8 micbias1_capless;
+	int rc = 0;
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+
+	dev_info(codec->dev, "%s: ucontrol->value.integer.value[0]  = %ld\n",
+			 __func__, ucontrol->value.integer.value[0]);
+
+	switch (ucontrol->value.integer.value[0]) {
+	case 0:
+		micbias1_capless = ucontrol->value.integer.value[0];
+		snd_soc_update_bits(codec,MSM8X16_WCD_A_ANALOG_MICB_1_EN,0x47,0x00);
+		break;
+	case 1:
+		micbias1_capless = ucontrol->value.integer.value[0];
+		snd_soc_update_bits(codec,MSM8X16_WCD_A_ANALOG_MICB_1_EN,0x47,0x46);
+		break;
+	default:
+		rc = -EINVAL;
+		break;
+	}
+	dev_info(codec->dev, "%s:MICB_1_EN:0x%x\n", __func__,
+			snd_soc_read(codec, MSM8X16_WCD_A_ANALOG_MICB_1_EN));
+	return rc;
+}
+
+static int micbias1_capless_control_get(
+					struct snd_kcontrol *kcontrol,
+					struct snd_ctl_elem_value *ucontrol)
+{
+	int rc = 0;
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	dev_dbg(codec->dev, "%s\n", __func__);
+	return rc;
+}
+#endif
+
 static int msm8x16_wcd_get_iir_band_audio_mixer(
 					struct snd_kcontrol *kcontrol,
 					struct snd_ctl_elem_value *ucontrol)
@@ -1720,6 +1761,14 @@ static const struct snd_kcontrol_new msm8x16_wcd_snd_controls[] = {
 	SOC_SINGLE_SX_TLV("IIR2 INP1 Volume",
 			  MSM8X16_WCD_A_CDC_IIR2_GAIN_B1_CTL,
 			0,  -84, 40, digital_gain),
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+	SOC_SINGLE("MICBIAS CAPLESS Switch",
+		MSM8X16_WCD_A_ANALOG_MICB_1_EN, 6, 1, 0),
+
+	SOC_SINGLE_EXT("MICBIAS1 CAPLESS Switch", SND_SOC_NOPM, 0, 1, 0,
+		micbias1_capless_control_get, micbias1_capless_control_put),
+#endif
 
 	SOC_ENUM("TX1 HPF cut off", cf_dec1_enum),
 	SOC_ENUM("TX2 HPF cut off", cf_dec2_enum),
@@ -4059,6 +4108,9 @@ static int msm8x16_wcd_device_down(struct snd_soc_codec *codec)
 
 	msm8x16_wcd_write(codec, MSM8X16_WCD_A_DIGITAL_PERPH_RESET_CTL4, 0x1);
 	msm8x16_wcd_write(codec, MSM8X16_WCD_A_ANALOG_PERPH_RESET_CTL4, 0x1);
+#ifdef CONFIG_VENDOR_SMARTISAN
+	wcd_mbhc_stop(&msm8x16_wcd_priv->mbhc);
+#endif
 	atomic_set(&pdata->mclk_enabled, false);
 	set_bit(BUS_DOWN, &msm8x16_wcd_priv->status_mask);
 	snd_soc_card_change_online_state(codec->card, 0);
@@ -4105,7 +4157,9 @@ static int msm8x16_wcd_device_up(struct snd_soc_codec *codec)
 
 	msm8x16_wcd_set_micb_v(codec);
 	msm8x16_wcd_configure_cap(codec, false, false);
+#ifndef CONFIG_VENDOR_SMARTISAN
 	wcd_mbhc_stop(&msm8x16_wcd_priv->mbhc);
+#endif
 	wcd_mbhc_start(&msm8x16_wcd_priv->mbhc,
 			msm8x16_wcd_priv->mbhc.mbhc_cfg);
 

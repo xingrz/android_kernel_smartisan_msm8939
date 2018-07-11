@@ -45,7 +45,11 @@
 				  SND_JACK_BTN_2 | SND_JACK_BTN_3 | \
 				  SND_JACK_BTN_4)
 #define OCP_ATTEMPT 1
+#ifdef CONFIG_VENDOR_SMARTISAN
+#define HS_DETECT_PLUG_TIME_MS (2 * 1000)
+#else
 #define HS_DETECT_PLUG_TIME_MS (3 * 1000)
+#endif
 #define SPECIAL_HS_DETECT_TIME_MS (2 * 1000)
 #define MBHC_BUTTON_PRESS_THRESHOLD_MIN 250
 #define GND_MIC_SWAP_THRESHOLD 4
@@ -197,7 +201,9 @@ static void wcd_enable_curr_micbias(const struct wcd_mbhc *mbhc,
 			MSM8X16_WCD_A_ANALOG_MBHC_FSM_CTL,
 			0x30, 0x30);
 		/* Program Button threshold registers as per CS */
+#ifndef CONFIG_VENDOR_SMARTISAN
 		wcd_program_btn_threshold(mbhc, false);
+#endif
 		break;
 	case WCD_MBHC_EN_MB:
 		snd_soc_update_bits(codec,
@@ -208,7 +214,9 @@ static void wcd_enable_curr_micbias(const struct wcd_mbhc *mbhc,
 			MSM8X16_WCD_A_ANALOG_MICB_2_EN,
 			0xC0, 0x80);
 		/* Program Button threshold registers as per MICBIAS */
+#ifndef CONFIG_VENDOR_SMARTISAN
 		wcd_program_btn_threshold(mbhc, true);
+#endif
 		break;
 	case WCD_MBHC_EN_PULLUP:
 		snd_soc_update_bits(codec,
@@ -218,7 +226,9 @@ static void wcd_enable_curr_micbias(const struct wcd_mbhc *mbhc,
 			MSM8X16_WCD_A_ANALOG_MICB_2_EN,
 			0xC0, 0x40);
 		/* Program Button threshold registers as per MICBIAS */
+#ifndef CONFIG_VENDOR_SMARTISAN
 		wcd_program_btn_threshold(mbhc, true);
+#endif
 		break;
 	case WCD_MBHC_EN_NONE:
 		snd_soc_update_bits(codec,
@@ -256,9 +266,15 @@ static int wcd_event_notify(struct notifier_block *self, unsigned long val,
 			snd_soc_update_bits(codec,
 					MSM8X16_WCD_A_ANALOG_MICB_1_CTL,
 					0x60, 0x60);
+#ifdef CONFIG_VENDOR_SMARTISAN
+			snd_soc_write(codec,
+					MSM8X16_WCD_A_ANALOG_MICB_1_VAL,
+					0xB0);
+#else
 			snd_soc_write(codec,
 					MSM8X16_WCD_A_ANALOG_MICB_1_VAL,
 					0xC0);
+#endif
 			/*
 			 * Special headset needs MICBIAS as 2.7V so wait for
 			 * 50 msec for the MICBIAS to reach 2.7 volts.
@@ -757,6 +773,9 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 			mbhc->current_plug = MBHC_PLUG_TYPE_GND_MIC_SWAP;
 		else if (jack_type == SND_JACK_HEADSET) {
 			mbhc->current_plug = MBHC_PLUG_TYPE_HEADSET;
+#ifdef CONFIG_VENDOR_SMARTISAN
+			mbhc->micbias_enable = true;
+#endif
 			mbhc->jiffies_atreport = jiffies;
 		}
 		else if (jack_type == SND_JACK_LINEOUT)
@@ -1091,6 +1110,9 @@ static void wcd_correct_swch_plug(struct work_struct *work)
 			pr_debug("%s: cable is extension cable\n", __func__);
 			plug_type = MBHC_PLUG_TYPE_HIGH_HPH;
 			wrk_complete = true;
+#ifdef CONFIG_VENDOR_SMARTISAN
+			break;
+#endif
 		} else {
 			pr_debug("%s: cable might be headset: %d\n", __func__,
 					plug_type);
@@ -1266,6 +1288,12 @@ static void wcd_mbhc_swch_irq_handler(struct wcd_mbhc *mbhc)
 
 	detection_type = (snd_soc_read(codec,
 				MSM8X16_WCD_A_ANALOG_MBHC_DET_CTL_1)) & 0x20;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	if (wcd_swch_level_remove(mbhc)) {
+		pr_info("%s: result2=0x10, so do removal handle\n", __func__);
+		detection_type = 0;
+	}
+#endif
 
 	/* Set the detection type appropriately */
 	snd_soc_update_bits(codec, MSM8X16_WCD_A_ANALOG_MBHC_DET_CTL_1,
@@ -1627,6 +1655,9 @@ static void wcd_btn_lpress_fn(struct work_struct *work)
 	struct wcd_mbhc *mbhc;
 	struct snd_soc_codec *codec;
 	s16 result1;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	s16 result2;
+#endif
 
 	pr_debug("%s: Enter\n", __func__);
 
@@ -1635,12 +1666,30 @@ static void wcd_btn_lpress_fn(struct work_struct *work)
 	codec = mbhc->codec;
 
 	result1 = snd_soc_read(codec, MSM8X16_WCD_A_ANALOG_MBHC_BTN_RESULT);
+#ifdef CONFIG_VENDOR_SMARTISAN
+	if (result1 == 0) {
+		pr_info("%s: wait 350ms for read result2 value correct\n", __func__);
+		msleep(350);
+	}
+
+	result2 = snd_soc_read(codec, MSM8X16_WCD_A_ANALOG_MBHC_ZDET_ELECT_RESULT);
+	pr_info("%s: result1: 0x%x, result2: 0x%x\n", __func__, result1, result2);
+	if (result2) {
+		pr_info("%s: remove HS, ignore\n", __func__);
+		goto done;
+	}
+#endif
+
 	if (mbhc->current_plug == MBHC_PLUG_TYPE_HEADSET) {
 		pr_debug("%s: Reporting long button press event, result1: %d\n",
 			 __func__, result1);
 		wcd_mbhc_jack_report(mbhc, &mbhc->button_jack,
 				mbhc->buttons_pressed, mbhc->buttons_pressed);
 	}
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+done:
+#endif
 	pr_debug("%s: leave\n", __func__);
 	wcd9xxx_spmi_unlock_sleep();
 }
@@ -1873,6 +1922,31 @@ static int wcd_mbhc_initialise(struct wcd_mbhc *mbhc)
 	wcd_program_btn_threshold(mbhc, false);
 
 	INIT_WORK(&mbhc->correct_plug_swch, wcd_correct_swch_plug);
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+	pr_info("%s: mbhc->current_plug:%d\n", __func__, mbhc->current_plug);
+	if (mbhc->current_plug != MBHC_PLUG_TYPE_NONE) {
+		if (wcd_swch_level_remove(mbhc)) {
+			pr_info("%s: Switch level is low\n", __func__);
+			snd_soc_update_bits(codec,
+					MSM8X16_WCD_A_ANALOG_MBHC_DET_CTL_1,
+					0x20, 0x00);
+		} else {
+			pr_info("%s: cable still inserted\n", __func__);
+			mbhc->current_plug = MBHC_PLUG_TYPE_NONE;
+			mbhc->hph_status = 0;
+			if (mbhc->buttons_pressed) {
+				wcd_mbhc_jack_report(mbhc, &mbhc->button_jack, 0,
+						mbhc->buttons_pressed);
+				mbhc->buttons_pressed &=
+						~WCD_MBHC_JACK_BUTTON_MASK;
+			}
+		}
+	} else {
+		pr_info("%s: starting \n", __func__);
+	}
+#endif
+
 	/* enable the WCD MBHC IRQ's */
 	wcd9xxx_spmi_enable_irq(mbhc->intr_ids->mbhc_sw_intr);
 	wcd9xxx_spmi_enable_irq(mbhc->intr_ids->mbhc_btn_press_intr);
@@ -2002,6 +2076,11 @@ void wcd_mbhc_stop(struct wcd_mbhc *mbhc)
 	mbhc->hph_status = 0;
 	wcd9xxx_spmi_disable_irq(mbhc->intr_ids->hph_left_ocp);
 	wcd9xxx_spmi_disable_irq(mbhc->intr_ids->hph_right_ocp);
+#ifdef CONFIG_VENDOR_SMARTISAN
+	wcd9xxx_spmi_disable_irq(mbhc->intr_ids->mbhc_sw_intr);
+	wcd9xxx_spmi_disable_irq(mbhc->intr_ids->hph_left_ocp);
+	wcd9xxx_spmi_disable_irq(mbhc->intr_ids->hph_right_ocp);
+#endif
 
 	if (mbhc->mbhc_fw || mbhc->mbhc_cal) {
 		cancel_delayed_work_sync(&mbhc->mbhc_firmware_dwork);
@@ -2055,7 +2134,11 @@ int wcd_mbhc_init(struct wcd_mbhc *mbhc, struct snd_soc_codec *codec,
 	mbhc->impedance_detect = impedance_det_en;
 	mbhc->hphl_swh = hph_swh;
 	mbhc->gnd_swh = gnd_swh;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	mbhc->micbias_enable = true;
+#else
 	mbhc->micbias_enable = false;
+#endif
 	mbhc->mbhc_cb = mbhc_cb;
 	mbhc->btn_press_intr = false;
 	mbhc->is_hs_recording = false;
@@ -2091,17 +2174,29 @@ int wcd_mbhc_init(struct wcd_mbhc *mbhc, struct snd_soc_codec *codec,
 				__func__);
 			return ret;
 		}
+#ifdef CONFIG_VENDOR_SMARTISAN
+		ret = snd_jack_set_key(mbhc->button_jack.jack,
+				       SND_JACK_BTN_1,
+				       KEY_VOLUMEUP);
+#else
 		ret = snd_jack_set_key(mbhc->button_jack.jack,
 				       SND_JACK_BTN_1,
 				       KEY_VOICECOMMAND);
+#endif
 		if (ret) {
 			pr_err("%s: Failed to set code for btn-1:%d\n",
 					__func__, ret);
 			return ret;
 		}
+#ifdef CONFIG_VENDOR_SMARTISAN
+		ret = snd_jack_set_key(mbhc->button_jack.jack,
+				       SND_JACK_BTN_2,
+				       KEY_VOLUMEDOWN);
+#else
 		ret = snd_jack_set_key(mbhc->button_jack.jack,
 				       SND_JACK_BTN_2,
 				       KEY_VOLUMEUP);
+#endif
 		if (ret) {
 			pr_err("%s: Failed to set code for btn-2:%d\n",
 				__func__, ret);
