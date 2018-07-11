@@ -31,11 +31,18 @@
 #include <linux/spinlock.h>
 #include <linux/pinctrl/consumer.h>
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+#define RESUME_DELAY_TIME 100
+#endif
+
 struct gpio_button_data {
 	const struct gpio_keys_button *button;
 	struct input_dev *input;
 	struct timer_list timer;
 	struct work_struct work;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	struct delayed_work ddwork;
+#endif
 	unsigned int timer_debounce;	/* in msecs */
 	unsigned int irq;
 	spinlock_t lock;
@@ -330,6 +337,15 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 	struct input_dev *input = bdata->input;
 	unsigned int type = button->type ?: EV_KEY;
 	int state = (gpio_get_value_cansleep(button->gpio) ? 1 : 0) ^ button->active_low;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	int cpu_id;
+
+	cpu_id = get_cpu();
+	put_cpu();
+
+	pr_info("%s:state=%d, code=%d, type=%d, get_input_resume_state=%d, cpu_id=%d\n", __func__,
+			state, button->code, type, get_input_resume_state(), cpu_id);
+#endif
 
 	if (type == EV_ABS) {
 		if (state)
@@ -344,6 +360,13 @@ static void gpio_keys_gpio_work_func(struct work_struct *work)
 {
 	struct gpio_button_data *bdata =
 		container_of(work, struct gpio_button_data, work);
+#ifdef CONFIG_VENDOR_SMARTISAN
+	int cpu_id;
+
+	cpu_id = get_cpu();
+	put_cpu();
+	pr_info("%s:cpu_id=%d\n", __func__, cpu_id);
+#endif
 
 	gpio_keys_gpio_report_event(bdata);
 
@@ -351,24 +374,56 @@ static void gpio_keys_gpio_work_func(struct work_struct *work)
 		pm_relax(bdata->input->dev.parent);
 }
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+static void gpio_keys_gpio_delayed(struct work_struct *work)
+{
+	struct delayed_work *ddwork = to_delayed_work(work);
+	struct gpio_button_data *bdata = container_of(ddwork, struct gpio_button_data, ddwork);
+	int cpu_id;
+
+	cpu_id = get_cpu();
+	put_cpu();
+	pr_info("%s:cpu_id=%d\n", __func__, cpu_id);
+	gpio_keys_gpio_report_event(bdata);
+
+	if (bdata->button->wakeup)
+		pm_relax(bdata->input->dev.parent);
+}
+#else
 static void gpio_keys_gpio_timer(unsigned long _data)
 {
 	struct gpio_button_data *bdata = (struct gpio_button_data *)_data;
 
 	schedule_work(&bdata->work);
 }
+#endif
 
 static irqreturn_t gpio_keys_gpio_isr(int irq, void *dev_id)
 {
 	struct gpio_button_data *bdata = dev_id;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	int cpu_id;
+#endif
 
 	BUG_ON(irq != bdata->irq);
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+	cpu_id = get_cpu();
+	put_cpu();
+	pr_info("%s:wakeup=%d, debounce=%d, cpu_id=%d, irq=%d, gpio=%d, state=%d\n", __func__,
+			bdata->button->wakeup, bdata->timer_debounce, cpu_id, irq, bdata->button->gpio, gpio_get_value(bdata->button->gpio));
+#endif
 
 	if (bdata->button->wakeup)
 		pm_stay_awake(bdata->input->dev.parent);
 	if (bdata->timer_debounce)
+#ifdef CONFIG_VENDOR_SMARTISAN
+		schedule_delayed_work_on(
+			cpu_id, &bdata->ddwork, msecs_to_jiffies(bdata->timer_debounce));
+#else
 		mod_timer(&bdata->timer,
 			jiffies + msecs_to_jiffies(bdata->timer_debounce));
+#endif
 	else
 		schedule_work(&bdata->work);
 
@@ -469,8 +524,14 @@ static int gpio_keys_setup_key(struct platform_device *pdev,
 		bdata->irq = irq;
 
 		INIT_WORK(&bdata->work, gpio_keys_gpio_work_func);
+#ifndef CONFIG_VENDOR_SMARTISAN
 		setup_timer(&bdata->timer,
 			    gpio_keys_gpio_timer, (unsigned long)bdata);
+#endif
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+		INIT_DELAYED_WORK(&bdata->ddwork, gpio_keys_gpio_delayed);
+#endif
 
 		isr = gpio_keys_gpio_isr;
 		irqflags = IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING;
@@ -807,6 +868,10 @@ static int gpio_keys_probe(struct platform_device *pdev)
 		goto fail2;
 	}
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+	set_input_resume_state(1);
+#endif
+
 	error = input_register_device(input);
 	if (error) {
 		dev_err(dev, "Unable to register input device, error: %d\n",
@@ -876,6 +941,10 @@ static int gpio_keys_suspend(struct device *dev)
 	struct input_dev *input = ddata->input;
 	int i, ret;
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+	input->is_resumed = 0;
+#endif
+
 	if (ddata->key_pinctrl) {
 		ret = gpio_keys_pinctrl_configure(ddata, false);
 		if (ret) {
@@ -907,6 +976,11 @@ static int gpio_keys_resume(struct device *dev)
 	int error = 0;
 	int i;
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+	pr_info("%s:input->is_resumed=%d\n", __func__, input->is_resumed);
+	input->dev.type->pm->resume(&(input->dev));
+#endif
+
 	if (ddata->key_pinctrl) {
 		error = gpio_keys_pinctrl_configure(ddata, true);
 		if (error) {
@@ -930,6 +1004,10 @@ static int gpio_keys_resume(struct device *dev)
 
 	if (error)
 		return error;
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+	input->is_resumed = 1;
+#endif
 
 	gpio_keys_report_state(ddata);
 	return 0;

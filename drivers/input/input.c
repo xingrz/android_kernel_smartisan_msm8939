@@ -40,6 +40,10 @@ static DEFINE_IDA(input_ida);
 static LIST_HEAD(input_dev_list);
 static LIST_HEAD(input_handler_list);
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+static int is_input_resume;
+#endif
+
 /*
  * input_mutex protects access to both input_dev_list and input_handler_list.
  * This also causes input_[un]register_device and input_[un]register_handler
@@ -1675,6 +1679,20 @@ void input_reset_device(struct input_dev *dev)
 }
 EXPORT_SYMBOL(input_reset_device);
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+int get_input_resume_state(void)
+{
+	return is_input_resume;
+}
+EXPORT_SYMBOL(get_input_resume_state);
+
+void set_input_resume_state(int state)
+{
+	is_input_resume = state;
+}
+EXPORT_SYMBOL(set_input_resume_state);
+#endif
+
 #ifdef CONFIG_PM
 static int input_dev_suspend(struct device *dev)
 {
@@ -1685,6 +1703,12 @@ static int input_dev_suspend(struct device *dev)
 	if (input_dev->users)
 		input_dev_toggle(input_dev, false);
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+	if (!strcmp(input_dev->name, "gpio-keys")) {
+		set_input_resume_state(0);
+	}
+#endif
+
 	mutex_unlock(&input_dev->mutex);
 
 	return 0;
@@ -1694,7 +1718,18 @@ static int input_dev_resume(struct device *dev)
 {
 	struct input_dev *input_dev = to_input_dev(dev);
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+	if (input_dev->is_resumed)
+		return 0;
+#endif
+
 	input_reset_device(input_dev);
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+	if (!strcmp(input_dev->name, "gpio-keys")) {
+		set_input_resume_state(1);
+	}
+#endif
 
 	return 0;
 }
@@ -1747,6 +1782,9 @@ struct input_dev *input_allocate_device(void)
 		device_initialize(&dev->dev);
 		mutex_init(&dev->mutex);
 		spin_lock_init(&dev->event_lock);
+#ifdef CONFIG_VENDOR_SMARTISAN
+		dev->is_resumed = 0;
+#endif
 		INIT_LIST_HEAD(&dev->h_list);
 		INIT_LIST_HEAD(&dev->node);
 
