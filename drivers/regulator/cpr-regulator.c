@@ -192,9 +192,16 @@ struct quot_adjust_info {
 	int quot_adjust;
 };
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+static const char * const vdd_apc_name[] =	{"vdd-apc-optional-prim",
+						"vdd-apc-optional-sec",
+						"vdd-apc",
+						"vdd-apcncp"};
+#else
 static const char * const vdd_apc_name[] =	{"vdd-apc-optional-prim",
 						"vdd-apc-optional-sec",
 						"vdd-apc"};
+#endif
 
 enum voltage_change_dir {
 	NO_CHANGE,
