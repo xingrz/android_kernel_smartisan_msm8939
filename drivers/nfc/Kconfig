@@ -36,6 +36,18 @@ config NFC_MEI_PHY
 
 	  If unsure, say N.
 
+config PN547_NFC
+	tristate "PN547 NFC driver"
+	depends on I2C
+	select CRC_CCITT
+	default y
+	help
+	  Say yes if you want PN547 Near Field Communication driver.
+	  This is for i2c connected version. If unsure, say N here.
+
+	  To compile this driver as a module, choose m here. The module will
+	  be called pn547.
+
 source "drivers/nfc/pn544/Kconfig"
 source "drivers/nfc/microread/Kconfig"
 
