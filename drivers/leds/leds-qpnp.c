@@ -26,6 +26,12 @@
 #include <linux/delay.h>
 #include <linux/regulator/consumer.h>
 #include <linux/delay.h>
+#ifdef CONFIG_VENDOR_SMARTISAN
+#include <linux/of_gpio.h>
+#include <linux/gpio.h>
+#include <linux/ktd202x.h>
+#include <soc/qcom/socinfo.h>
+#endif
 
 #define WLED_MOD_EN_REG(base, n)	(base + 0x60 + n*0x10)
 #define WLED_IDAC_DLY_REG(base, n)	(WLED_MOD_EN_REG(base, n) + 0x01)
@@ -264,6 +270,10 @@ enum qpnp_leds {
 	QPNP_ID_LED_MPP,
 	QPNP_ID_KPDBL,
 	QPNP_ID_LED_GPIO,
+#ifdef CONFIG_VENDOR_SMARTISAN
+	QPNP_ID_LED_MSMGPIO,
+	QPNP_ID_LED_KTD202X,
+#endif
 	QPNP_ID_MAX,
 };
 
@@ -518,6 +528,19 @@ struct gpio_config_data {
 	bool	enable;
 };
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+struct msmgpio_config_data {
+	int gpio;
+	int en_gpio;
+};
+
+struct ktd202x_config_data {
+	struct ktd202x_chip *ktd202x;
+	int trickle_gpio;
+	int blink;
+};
+#endif
+
 /**
  * struct qpnp_led_data - internal led data structure
  * @led_classdev - led class device
@@ -550,6 +573,10 @@ struct qpnp_led_data {
 	struct rgb_config_data	*rgb_cfg;
 	struct mpp_config_data	*mpp_cfg;
 	struct gpio_config_data	*gpio_cfg;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	struct msmgpio_config_data	*msmgpio_cfg;
+	struct ktd202x_config_data	*ktd202x_cfg;
+#endif
 	int			max_current;
 	bool			default_on;
 	bool                    in_order_command_processing;
@@ -561,6 +588,9 @@ static struct pwm_device *kpdbl_master;
 static u32 kpdbl_master_period_us;
 DECLARE_BITMAP(kpdbl_leds_in_use, NUM_KPDBL_LEDS);
 static bool is_kpdbl_master_turn_on;
+#ifdef CONFIG_VENDOR_SMARTISAN
+extern struct ktd202x_chip *the_ktd202x_chip;
+#endif
 
 static int
 qpnp_led_masked_write(struct qpnp_led_data *led, u16 addr, u8 mask, u8 val)
@@ -1043,6 +1073,38 @@ err_reg_enable:
 
 	return rc;
 }
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+static int qpnp_msmgpio_set(struct qpnp_led_data *led)
+{
+	if (led->cdev.brightness) {
+		gpio_direction_output(led->msmgpio_cfg->gpio, 1);
+	} else {
+		gpio_direction_output(led->msmgpio_cfg->gpio, 0);
+	}
+
+	return 0;
+}
+
+static int qpnp_ktd202x_set(struct qpnp_led_data *led)
+{
+	if (!strcmp(led->cdev.name, "red")) {
+		led->ktd202x_cfg->ktd202x->brightness_red = led->cdev.brightness;
+		led->ktd202x_cfg->ktd202x->blink_red = 0;
+		ktd202x_led_on(led->ktd202x_cfg->ktd202x, 0);
+	} else if (!strcmp(led->cdev.name, "green")) {
+		led->ktd202x_cfg->ktd202x->brightness_green = led->cdev.brightness;
+		led->ktd202x_cfg->ktd202x->blink_green = 0;
+		ktd202x_led_on(led->ktd202x_cfg->ktd202x, 1);
+	} else if (!strcmp(led->cdev.name, "blue")) {
+		led->ktd202x_cfg->ktd202x->brightness_blue = led->cdev.brightness;
+		led->ktd202x_cfg->ktd202x->blink_blue = 0;
+		ktd202x_led_on(led->ktd202x_cfg->ktd202x, 2);
+	}
+
+	return 0;
+}
+#endif
 
 static int qpnp_gpio_set(struct qpnp_led_data *led)
 {
@@ -1862,6 +1924,22 @@ static void __qpnp_led_work(struct qpnp_led_data *led,
 					"GPIO set brightness failed (%d)\n",
 					rc);
 		break;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	case QPNP_ID_LED_MSMGPIO:
+		rc = qpnp_msmgpio_set(led);
+		if (rc < 0)
+			dev_err(&led->spmi_dev->dev,
+					"GPIO set brightness failed (%d)\n",
+					rc);
+		break;
+	case QPNP_ID_LED_KTD202X:
+		rc = qpnp_ktd202x_set(led);
+		if (rc < 0)
+			dev_err(&led->spmi_dev->dev,
+					"ktd202x set brightness failed (%d)\n",
+					rc);
+		break;
+#endif
 	case QPNP_ID_KPDBL:
 		rc = qpnp_kpdbl_set(led);
 		if (rc < 0)
@@ -1913,6 +1991,15 @@ static int qpnp_led_set_max_brightness(struct qpnp_led_data *led)
 	case QPNP_ID_LED_GPIO:
 			led->cdev.max_brightness = led->max_current;
 		break;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	case QPNP_ID_LED_MSMGPIO:
+			led->cdev.max_brightness = led->max_current;
+		break;
+	case QPNP_ID_LED_KTD202X:
+			led->cdev.max_brightness = LED_FULL;
+			led->ktd202x_cfg->ktd202x->max_brightness = led->max_current;
+		break;
+#endif
 	case QPNP_ID_KPDBL:
 		led->cdev.max_brightness = KPDBL_MAX_LEVEL;
 		break;
@@ -2656,6 +2743,118 @@ static void led_blink(struct qpnp_led_data *led,
 	mutex_unlock(&led->lock);
 }
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+static void led_ktd202x_blink(struct qpnp_led_data *led)
+{
+	if (!strcmp(led->cdev.name, "red")) {
+		led->ktd202x_cfg->ktd202x->brightness_red = led->cdev.brightness;
+		led->ktd202x_cfg->ktd202x->blink_red = led->ktd202x_cfg->blink;
+		ktd202x_breath_leds(led->ktd202x_cfg->ktd202x, 0);
+	} else if (!strcmp(led->cdev.name, "green")) {
+		led->ktd202x_cfg->ktd202x->blink_green = led->ktd202x_cfg->blink;
+		led->ktd202x_cfg->ktd202x->brightness_green = led->cdev.brightness;
+		ktd202x_breath_leds(led->ktd202x_cfg->ktd202x, 1);
+	} else if (!strcmp(led->cdev.name, "blue")) {
+		led->ktd202x_cfg->ktd202x->brightness_blue = led->cdev.brightness;
+		led->ktd202x_cfg->ktd202x->blink_blue = led->ktd202x_cfg->blink;
+		ktd202x_breath_leds(led->ktd202x_cfg->ktd202x, 2);
+	}
+}
+
+static ssize_t ramp_time_store(struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct qpnp_led_data *led;
+	unsigned long ramp_period;
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	ssize_t ret = -EINVAL;
+
+	ret = kstrtoul(buf, 10, &ramp_period);
+	if (ret)
+		return ret;
+	led = container_of(led_cdev, struct qpnp_led_data, cdev);
+
+	led->ktd202x_cfg->ktd202x->ramp_period = ramp_period;
+
+	return count;
+}
+
+static ssize_t scaling_store(struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct qpnp_led_data *led;
+	unsigned long scaling;
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	ssize_t ret = -EINVAL;
+
+	ret = kstrtoul(buf, 10, &scaling);
+	if (ret)
+		return ret;
+	led = container_of(led_cdev, struct qpnp_led_data, cdev);
+
+	led->ktd202x_cfg->ktd202x->scaling = (u8)scaling;
+
+	return count;
+}
+
+static ssize_t ontime_store(struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct qpnp_led_data *led;
+	unsigned long ontime;
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	ssize_t ret = -EINVAL;
+
+	ret = kstrtoul(buf, 10, &ontime);
+	if (ret)
+		return ret;
+	led = container_of(led_cdev, struct qpnp_led_data, cdev);
+
+	led->ktd202x_cfg->ktd202x->ontime = ontime;
+
+	return count;
+}
+
+static ssize_t period_store(struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct qpnp_led_data *led;
+	unsigned long period;
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	ssize_t ret = -EINVAL;
+
+	ret = kstrtoul(buf, 10, &period);
+	if (ret)
+		return ret;
+	led = container_of(led_cdev, struct qpnp_led_data, cdev);
+
+	led->ktd202x_cfg->ktd202x->period = period;
+
+	return count;
+}
+
+static DEVICE_ATTR(ramp_time, 0664, NULL, ramp_time_store);
+static DEVICE_ATTR(scaling, 0664, NULL, scaling_store);
+static DEVICE_ATTR(ontime, 0664, NULL, ontime_store);
+static DEVICE_ATTR(period, 0664, NULL, period_store);
+
+static struct attribute *ktd202x_attrs[] = {
+	&dev_attr_ramp_time.attr,
+	&dev_attr_scaling.attr,
+	&dev_attr_ontime.attr,
+	&dev_attr_period.attr,
+	NULL
+};
+
+static const struct attribute_group ktd202x_attr_group = {
+	.attrs = ktd202x_attrs,
+};
+#endif
+
 static ssize_t blink_store(struct device *dev,
 	struct device_attribute *attr,
 	const char *buf, size_t count)
@@ -2671,6 +2870,12 @@ static ssize_t blink_store(struct device *dev,
 	led = container_of(led_cdev, struct qpnp_led_data, cdev);
 	led->cdev.brightness = blinking ? led->cdev.max_brightness : 0;
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+	if (led->id == QPNP_ID_LED_KTD202X) {
+		led->cdev.brightness = blinking;
+	}
+#endif
+
 	switch (led->id) {
 	case QPNP_ID_LED_MPP:
 		led_blink(led, led->mpp_cfg->pwm_cfg);
@@ -2683,6 +2888,12 @@ static ssize_t blink_store(struct device *dev,
 	case QPNP_ID_KPDBL:
 		led_blink(led, led->kpdbl_cfg->pwm_cfg);
 		break;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	case QPNP_ID_LED_KTD202X:
+		led->ktd202x_cfg->blink = blinking;
+		led_ktd202x_blink(led);
+		break;
+#endif
 	default:
 		dev_err(&led->spmi_dev->dev, "Invalid LED id type for blink\n");
 		return -EINVAL;
@@ -3020,6 +3231,18 @@ static int qpnp_gpio_init(struct qpnp_led_data *led)
 	return 0;
 }
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+static int qpnp_msmgpio_init(struct qpnp_led_data *led)
+{
+	return 0;
+}
+
+static int qpnp_ktd202x_init(struct qpnp_led_data *led)
+{
+	return 0;
+}
+#endif
+
 static int qpnp_led_initialize(struct qpnp_led_data *led)
 {
 	int rc = 0;
@@ -3058,6 +3281,20 @@ static int qpnp_led_initialize(struct qpnp_led_data *led)
 			dev_err(&led->spmi_dev->dev,
 				"GPIO initialize failed(%d)\n", rc);
 		break;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	case QPNP_ID_LED_MSMGPIO:
+		rc = qpnp_msmgpio_init(led);
+		if (rc)
+			dev_err(&led->spmi_dev->dev,
+				"GPIO initialize failed(%d)\n", rc);
+		break;
+	case QPNP_ID_LED_KTD202X:
+		rc = qpnp_ktd202x_init(led);
+		if (rc)
+			dev_err(&led->spmi_dev->dev,
+				"ktd202x initialize failed(%d)\n", rc);
+		break;
+#endif
 	case QPNP_ID_KPDBL:
 		rc = qpnp_kpdbl_init(led);
 		if (rc)
@@ -3813,6 +4050,91 @@ err_config_mpp:
 	return rc;
 }
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+static int qpnp_get_config_msmgpio(struct qpnp_led_data *led,
+		struct device_node *node)
+{
+	int rc;
+
+	led->msmgpio_cfg = devm_kzalloc(&led->spmi_dev->dev,
+			sizeof(struct msmgpio_config_data), GFP_KERNEL);
+	if (!led->msmgpio_cfg) {
+		dev_err(&led->spmi_dev->dev, "Unable to allocate memory msmgpio struct\n");
+		return -ENOMEM;
+	}
+
+	led->msmgpio_cfg->gpio = of_get_named_gpio(node, "qcom,leds_gpio", 0);
+	if (led->msmgpio_cfg->gpio < 0) {
+		pr_err("%s:of_get_named_gpio err\n", __func__);
+	} else {
+		rc = gpio_request(led->msmgpio_cfg->gpio, "leds_gpio");
+		if (rc < 0) {
+			pr_err("%s:gpio %d request failed\n", __func__, led->msmgpio_cfg->gpio);
+		} else {
+			gpio_direction_output(led->msmgpio_cfg->gpio, 0);
+		}
+	}
+
+	return 0;
+}
+
+static int qpnp_get_config_ktd202x(struct qpnp_led_data *led,
+		struct device_node *node)
+{
+	int rc;
+	u32 val;
+
+	led->ktd202x_cfg = devm_kzalloc(&led->spmi_dev->dev,
+			sizeof(struct ktd202x_config_data), GFP_KERNEL);
+	if (!led->ktd202x_cfg) {
+		dev_err(&led->spmi_dev->dev, "Unable to allocate memory msmgpio struct\n");
+		return -ENOMEM;
+	}
+
+	led->ktd202x_cfg->ktd202x = the_ktd202x_chip;
+	rc = of_property_read_u32(node, "ramp-time",
+		&led->ktd202x_cfg->ktd202x->ramp_period);
+	if (rc < 0) {
+		dev_err(&led->spmi_dev->dev,
+				"Failure reading ramp time, rc =  %d\n", rc);
+		led->ktd202x_cfg->ktd202x->ramp_period = 0x55;
+	}
+	rc = of_property_read_u32(node, "flash-period",
+		&led->ktd202x_cfg->ktd202x->period);
+	if (rc < 0) {
+		dev_err(&led->spmi_dev->dev,
+				"Failure reading ramp time, rc =  %d\n", rc);
+		led->ktd202x_cfg->ktd202x->period = 0x12;
+	}
+	rc = of_property_read_u32(node, "scaling", &val);
+	led->ktd202x_cfg->ktd202x->scaling = (u8)val;
+	if (rc < 0) {
+		dev_err(&led->spmi_dev->dev,
+				"Failure reading scaling, rc =  %d\n", rc);
+		led->ktd202x_cfg->ktd202x->scaling = 0x01;
+	}
+	rc = of_property_read_u32(node, "ontime",
+		&led->ktd202x_cfg->ktd202x->ontime);
+	if (rc < 0) {
+		dev_err(&led->spmi_dev->dev,
+				"Failure reading ontime, rc =  %d\n", rc);
+		led->ktd202x_cfg->ktd202x->ontime = (led->ktd202x_cfg->ktd202x->period) / 3;
+	}
+	led->ktd202x_cfg->trickle_gpio = of_get_named_gpio(node, "qcom,trickle-gpio", 0);
+	if (led->ktd202x_cfg->trickle_gpio < 0) {
+		pr_err("%s:of_get_named_gpio err\n", __func__);
+	} else {
+		rc = gpio_request(led->ktd202x_cfg->trickle_gpio, "trickle_gpio");
+		if (rc < 0) {
+			pr_err("%s:gpio %d request failed\n", __func__, led->ktd202x_cfg->trickle_gpio);
+		} else {
+			gpio_direction_output(led->ktd202x_cfg->trickle_gpio, 1);
+		}
+	}
+	return 0;
+}
+#endif
+
 static int qpnp_get_config_gpio(struct qpnp_led_data *led,
 		struct device_node *node)
 {
@@ -3861,6 +4183,13 @@ static int qpnp_leds_probe(struct spmi_device *spmi)
 	int rc, i, num_leds = 0, parsed_leds = 0;
 	const char *led_label;
 	bool regulator_probe = false;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	uint32_t hw_ver;
+	uint8_t hw_ver_major;
+
+	hw_ver = socinfo_get_platform_version();
+	hw_ver_major = (uint8_t)(hw_ver >> 8 & 0xff) - 1;
+#endif
 
 	node = spmi->dev.of_node;
 	if (node == NULL)
@@ -3885,6 +4214,7 @@ static int qpnp_leds_probe(struct spmi_device *spmi)
 		led->num_leds = num_leds;
 		led->spmi_dev = spmi;
 
+#ifndef CONFIG_VENDOR_SMARTISAN
 		led_resource = spmi_get_resource(spmi, NULL, IORESOURCE_MEM, 0);
 		if (!led_resource) {
 			dev_err(&spmi->dev, "Unable to get LED base address\n");
@@ -3892,6 +4222,7 @@ static int qpnp_leds_probe(struct spmi_device *spmi)
 			goto fail_id_check;
 		}
 		led->base = led_resource->start;
+#endif
 
 		rc = of_property_read_string(temp, "label", &led_label);
 		if (rc < 0) {
@@ -3899,6 +4230,24 @@ static int qpnp_leds_probe(struct spmi_device *spmi)
 				"Failure reading label, rc = %d\n", rc);
 			goto fail_id_check;
 		}
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+		if (!((!strcmp(led_label, "ktd202x")) && hw_ver_major)) {
+			led_resource = spmi_get_resource(spmi, NULL, IORESOURCE_MEM, 0);
+			if (!led_resource) {
+				dev_err(&spmi->dev, "Unable to get LED base address\n");
+				rc = -ENXIO;
+				goto fail_id_check;
+			}
+			led->base = led_resource->start;
+		} else {
+			if (!the_ktd202x_chip) {
+				dev_err(&spmi->dev, "The ktd202x is removed\n");
+				rc = -ENXIO;
+				goto fail_id_check;
+			}
+		}
+#endif
 
 		rc = of_property_read_string(temp, "linux,name",
 			&led->cdev.name);
@@ -3972,6 +4321,22 @@ static int qpnp_leds_probe(struct spmi_device *spmi)
 						"Unable to read gpio config data\n");
 				goto fail_id_check;
 			}
+#ifdef CONFIG_VENDOR_SMARTISAN
+		} else if (strncmp(led_label, "msmgpio", sizeof("msmgpio")) == 0) {
+			rc = qpnp_get_config_msmgpio(led, temp);
+			if (rc < 0) {
+				dev_err(&led->spmi_dev->dev,
+						"Unable to read gpio config data\n");
+				goto fail_id_check;
+			}
+		} else if (strncmp(led_label, "ktd202x", sizeof("ktd202x")) == 0) {
+			rc = qpnp_get_config_ktd202x(led, temp);
+			if (rc < 0) {
+				dev_err(&led->spmi_dev->dev,
+						"Unable to read ktd202x config data\n");
+				goto fail_id_check;
+			}
+#endif
 		} else if (strncmp(led_label, "kpdbl", sizeof("kpdbl")) == 0) {
 			bitmap_zero(kpdbl_leds_in_use, NUM_KPDBL_LEDS);
 			is_kpdbl_master_turn_on = false;
@@ -4107,6 +4472,17 @@ static int qpnp_leds_probe(struct spmi_device *spmi)
 				if (rc)
 					goto fail_id_check;
 			}
+#ifdef CONFIG_VENDOR_SMARTISAN
+		} else if (led->id == QPNP_ID_LED_KTD202X) {
+			rc = sysfs_create_group(&led->cdev.dev->kobj,
+							&blink_attr_group);
+			if (rc)
+				goto fail_id_check;
+			rc = sysfs_create_group(&led->cdev.dev->kobj,
+				&ktd202x_attr_group);
+			if (rc)
+				goto fail_id_check;
+#endif
 		}
 
 		/* configure default state */
@@ -4213,6 +4589,20 @@ static int qpnp_leds_remove(struct spmi_device *spmi)
 				sysfs_remove_group(&led_array[i].cdev.dev->
 					kobj, &lpg_attr_group);
 			break;
+#ifdef CONFIG_VENDOR_SMARTISAN
+		case QPNP_ID_LED_KTD202X:
+			if (led_array[i].ktd202x_cfg->ktd202x->color) {
+				led_array[i].ktd202x_cfg->blink = 0;
+				led_array[i].cdev.brightness = 0;
+				qpnp_ktd202x_set(&(led_array[i]));
+				led_ktd202x_blink(&(led_array[i]));
+			}
+			sysfs_remove_group(&led_array[i].cdev.dev->\
+				kobj, &blink_attr_group);
+			sysfs_remove_group(&led_array[i].cdev.dev->\
+				kobj, &ktd202x_attr_group);
+			break;
+#endif
 		default:
 			dev_err(&led_array[i].spmi_dev->dev,
 					"Invalid LED(%d)\n",
