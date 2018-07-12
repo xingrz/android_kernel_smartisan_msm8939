@@ -104,12 +104,21 @@ enum msm_usb_phy_type {
 	SNPS_FEMTO_PHY,
 };
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+#define IDEV_CHG_MAX	1200
+#define IDEV_CHG_MIN	540
+#define IUNIT		100
+
+#define IDEV_ACA_CHG_MAX	1200
+#define IDEV_ACA_CHG_LIMIT	540
+#else
 #define IDEV_CHG_MAX	1500
 #define IDEV_CHG_MIN	500
 #define IUNIT		100
 
 #define IDEV_ACA_CHG_MAX	1500
 #define IDEV_ACA_CHG_LIMIT	500
+#endif
 #define IDEV_HVDCP_CHG_MAX	1800
 
 /**
