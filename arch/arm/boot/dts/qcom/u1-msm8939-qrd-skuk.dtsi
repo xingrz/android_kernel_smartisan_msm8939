@@ -79,7 +79,7 @@
 			focaltech,irq-gpio = <&msm_gpio 13 0x2008>;
 			focaltech,display-coords = <0 0 1080 1920>;
 			focaltech,panel-coords = <0 0 1080 2200>;
-			focaltech,button-map= <139 102 158>;
+			focaltech,button-map= <158 172 580>;
 			focaltech,no-force-update;
 			focaltech,i2c-pull-up;
 			focaltech,group-id = <1>;
@@ -105,7 +105,7 @@
 		qcom,disp-maxy = <1920>;
 		qcom,panel-maxx = <1080>;
 		qcom,panel-maxy = <2200>;
-		qcom,key-codes = <139 102 158>;
+		qcom,key-codes = <158 172 580>;
 		qcom,y-offset = <0>;
 	};
 

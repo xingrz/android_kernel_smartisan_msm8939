@@ -34,7 +34,9 @@
 			qcom,clear-warm-reset;
 			qcom,store-hard-reset-reason;
 
+			/* Power */
 			qcom,pon_1 {
+				label = "power";
 				qcom,pon-type = <0>;
 				qcom,support-reset = <1>;
 				qcom,pull-up = <1>;
@@ -52,10 +54,12 @@
 				linux,code = <116>;
 			};
 
+			/* Left Down */
 			qcom,pon_2 {
+				label = "left_down";
 				qcom,pon-type = <1>;
 				qcom,pull-up = <1>;
-				linux,code = <114>;
+				linux,code = <224>;
 			};
 		};
 
