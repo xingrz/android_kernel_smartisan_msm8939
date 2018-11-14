@@ -126,3 +126,5 @@ obj-$(CONFIG_SENSORS_TMD27723)		+= tmd27723.o
 obj-$(CONFIG_SENSORS_BMM150)		+= bmm050_driver.o bmm050.o
 ccflags-y += -DBMM_USE_BASIC_I2C_FUNC -DCONFIG_BMM_USE_PLATFORM_DATA
 endif
+
+obj-y += keypad.o
