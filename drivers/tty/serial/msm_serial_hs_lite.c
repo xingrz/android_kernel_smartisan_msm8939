@@ -1990,7 +1990,11 @@ static void __exit msm_serial_hsl_exit(void)
 	uart_unregister_driver(&msm_hsl_uart_driver);
 }
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+fs_initcall(msm_serial_hsl_init);
+#else
 module_init(msm_serial_hsl_init);
+#endif
 module_exit(msm_serial_hsl_exit);
 
 MODULE_DESCRIPTION("Driver for msm HSUART serial device");
