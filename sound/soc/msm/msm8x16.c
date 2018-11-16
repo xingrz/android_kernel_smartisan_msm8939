@@ -1336,8 +1336,13 @@ static void *def_msm8x16_wcd_mbhc_cal(void)
 		return NULL;
 	}
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+#define S(X, Y) ((WCD_MBHC_CAL_PLUG_TYPE_PTR(msm8x16_wcd_cal)->X) = (Y))
+	S(v_hs_max, 1700);
+#else
 #define S(X, Y) ((WCD_MBHC_CAL_PLUG_TYPE_PTR(msm8x16_wcd_cal)->X) = (Y))
 	S(v_hs_max, 1500);
+#endif
 #undef S
 #define S(X, Y) ((WCD_MBHC_CAL_BTN_DET_PTR(msm8x16_wcd_cal)->X) = (Y))
 	S(num_btn, WCD_MBHC_DEF_BUTTONS);
@@ -1360,6 +1365,18 @@ static void *def_msm8x16_wcd_mbhc_cal(void)
 	 * 210-290 == Button 2
 	 * 360-680 == Button 3
 	 */
+#ifdef CONFIG_VENDOR_SMARTISAN
+	btn_low[0] =112;
+	btn_high[0] = 112;
+	btn_low[1] = 275;
+	btn_high[1] = 275;
+	btn_low[2] = 425;
+	btn_high[2] = 425;
+	btn_low[3] = 450;
+	btn_high[3] = 450;
+	btn_low[4] = 525;
+	btn_high[4] = 525;
+#else
 	btn_low[0] = 75;
 	btn_high[0] = 75;
 	btn_low[1] = 150;
@@ -1370,6 +1387,7 @@ static void *def_msm8x16_wcd_mbhc_cal(void)
 	btn_high[3] = 450;
 	btn_low[4] = 500;
 	btn_high[4] = 500;
+#endif
 
 	return msm8x16_wcd_cal;
 }
@@ -2315,9 +2333,13 @@ static void msm8x16_dt_parse_cap_info(struct platform_device *pdev,
 	const char *ext1_cap = "qcom,msm-micbias1-ext-cap";
 	const char *ext2_cap = "qcom,msm-micbias2-ext-cap";
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+	pdata->micbias1_cap_mode = MICBIAS_NO_EXT_BYP_CAP;
+#else
 	pdata->micbias1_cap_mode =
 		(of_property_read_bool(pdev->dev.of_node, ext1_cap) ?
 		MICBIAS_EXT_BYP_CAP : MICBIAS_NO_EXT_BYP_CAP);
+#endif
 
 	pdata->micbias2_cap_mode =
 		(of_property_read_bool(pdev->dev.of_node, ext2_cap) ?
