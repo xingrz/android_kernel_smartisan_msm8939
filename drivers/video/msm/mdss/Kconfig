@@ -44,5 +44,11 @@ config FB_MSM_MDSS_MDP3
 	The MDP3 provides support for an older version display controller
 	included in latest display sub-system, known as MDSS.
 
+config KTD2150
+	depends on FB_MSM_MDSS
+	bool "KTD2150 power for panel"
+	---help---
+	The KTD2150 provides support for an panel.
+
 config SPLASH_BLACK_CMCC
 	bool "splash black"

@@ -26,13 +26,21 @@
 
 #define DT_CMD_HDR 6
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+static int compat_flag = 0;
+#endif
+
 /* NT35596 panel specific status variables */
 #define NT35596_BUF_3_STATUS 0x02
 #define NT35596_BUF_4_STATUS 0x40
 #define NT35596_BUF_5_STATUS 0x80
 #define NT35596_MAX_ERR_CNT 2
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+#define MIN_REFRESH_RATE 30
+#else
 #define MIN_REFRESH_RATE 48
+#endif
 #define DEFAULT_MDP_TRANSFER_TIME 14000
 
 DEFINE_LED_TRIGGER(bl_led_trigger);
@@ -177,10 +185,23 @@ static void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 }
 
 static char led_pwm1[2] = {0x51, 0x0};	/* DTYPE_DCS_WRITE1 */
+#ifdef CONFIG_VENDOR_SMARTISAN
+static char cabc_flag[2] = {0x55, 0x03};	/* DTYPE_DCS_WRITE1 */
+static char led_cabc[5] = {0x55, 0x00, 0x01, 0x02, 0x03};
+static char cabc_level_current = 0x03;
+#endif
+
 static struct dsi_cmd_desc backlight_cmd = {
 	{DTYPE_DCS_WRITE1, 1, 0, 0, 1, sizeof(led_pwm1)},
 	led_pwm1
 };
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+static struct dsi_cmd_desc backlight_cabc_cmd[2] = {
+	{{DTYPE_DCS_WRITE1, 1, 0, 0, 1, sizeof(led_pwm1)}, led_pwm1},
+	{{DTYPE_DCS_WRITE1, 1, 0, 0, 1, sizeof(cabc_flag)}, cabc_flag}
+};
+#endif
 
 static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 {
@@ -198,8 +219,30 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 	led_pwm1[1] = (unsigned char)level;
 
 	memset(&cmdreq, 0, sizeof(cmdreq));
+#ifdef CONFIG_VENDOR_SMARTISAN
+	if (level > 15) {
+		if (cabc_flag[1] == cabc_level_current) {
+			cmdreq.cmds = &backlight_cmd;
+			cmdreq.cmds_cnt = 1;
+		} else {
+			cabc_flag[1] = cabc_level_current;
+			cmdreq.cmds = backlight_cabc_cmd;
+			cmdreq.cmds_cnt = 2;
+		}
+	} else {
+		if (cabc_flag[1] == 0) {
+			cmdreq.cmds = &backlight_cmd;
+			cmdreq.cmds_cnt = 1;
+		} else {
+			cabc_flag[1] = 0;
+			cmdreq.cmds = backlight_cabc_cmd;
+			cmdreq.cmds_cnt = 2;
+		}
+	}
+#else
 	cmdreq.cmds = &backlight_cmd;
 	cmdreq.cmds_cnt = 1;
+#endif
 	cmdreq.flags = CMD_REQ_COMMIT | CMD_CLK_CTRL;
 	cmdreq.rlen = 0;
 	cmdreq.cb = NULL;
@@ -257,6 +300,10 @@ disp_en_gpio_err:
 	return rc;
 }
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+extern void ktd2150_powerfor_lcd(int enable);
+#endif
+
 int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 {
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
@@ -312,6 +359,11 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			else if (pinfo->mode_gpio_state == MODE_GPIO_LOW)
 				gpio_set_value((ctrl_pdata->mode_gpio), 0);
 		}
+#ifdef CONFIG_VENDOR_SMARTISAN
+		mdelay(2);
+		ktd2150_powerfor_lcd(1);
+		mdelay(10);
+#endif
 		if (ctrl_pdata->ctrl_state & CTRL_STATE_PANEL_INIT) {
 			pr_debug("%s: Panel Not properly turned OFF\n",
 						__func__);
@@ -327,6 +379,9 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			gpio_set_value((ctrl_pdata->disp_en_gpio), 0);
 			gpio_free(ctrl_pdata->disp_en_gpio);
 		}
+#ifdef CONFIG_VENDOR_SMARTISAN
+		ktd2150_powerfor_lcd(0);
+#endif
 		gpio_set_value((ctrl_pdata->rst_gpio), 0);
 		gpio_free(ctrl_pdata->rst_gpio);
 		if (gpio_is_valid(ctrl_pdata->mode_gpio))
@@ -334,6 +389,46 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 	}
 	return rc;
 }
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+int mdss_dsi_panel_power_vdd(struct mdss_panel_data *pdata, int enable)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+	int rc = 0;
+
+	if (pdata == NULL) {
+		pr_err("%s: Invalid input data\n", __func__);
+		return -EINVAL;
+	}
+
+	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+
+	if (!gpio_is_valid(ctrl_pdata->vdd_gpio)) {
+		pr_err("%s:%d, vdd gpio line not configured\n",
+			   __func__, __LINE__);
+	}
+
+	if (enable) {
+		if (gpio_is_valid(ctrl_pdata->vdd_gpio)) {
+			rc = gpio_request(ctrl_pdata->vdd_gpio,
+							"vdd_enable");
+			if (rc) {
+				pr_err("request vdd_en gpio failed, rc=%d\n",
+					       rc);
+			}
+		}
+		if (gpio_is_valid(ctrl_pdata->vdd_gpio))
+			gpio_set_value((ctrl_pdata->vdd_gpio), 1);
+	} else {
+		if (gpio_is_valid(ctrl_pdata->vdd_gpio)) {
+			gpio_set_value((ctrl_pdata->vdd_gpio), 0);
+			gpio_free(ctrl_pdata->vdd_gpio);
+		}
+	}
+	return rc;
+}
+#endif
 
 /**
  * mdss_dsi_roi_merge() -  merge two roi into single roi
@@ -601,6 +696,9 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 {
 	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
 	struct mdss_panel_info *pinfo;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	int n;
+#endif
 
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
@@ -611,6 +709,48 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+	for (n = ctrl->on_cmds.cmd_cnt-1; n >0; n--) {
+		if (ctrl->on_cmds.cmds[n].payload[0] == cabc_flag[0]) {
+			ctrl->on_cmds.cmds[n].payload[1] = cabc_flag[1];
+			break;
+		}
+	}
+
+	if (pdata->panel_info.cabc_enable == 1) {
+		cabc_level_current = led_cabc[1];
+		for (n = ctrl->on_cmds.cmd_cnt-1;n >0;n--) {
+			if (ctrl->on_cmds.cmds[n].payload[0] == led_cabc[0]) {
+				ctrl->on_cmds.cmds[n].payload[1] = led_cabc[1];
+				break;
+			}
+		}
+	} else if (pdata->panel_info.cabc_enable == 2) {
+		cabc_level_current = led_cabc[2];
+		for (n = ctrl->on_cmds.cmd_cnt-1;n >0;n--) {
+			if (ctrl->on_cmds.cmds[n].payload[0] == led_cabc[0]) {
+				ctrl->on_cmds.cmds[n].payload[1] = led_cabc[2];
+				break;
+			}
+		}
+	} else if (pdata->panel_info.cabc_enable == 3) {
+		cabc_level_current = led_cabc[3];
+		for (n = ctrl->on_cmds.cmd_cnt-1;n >0;n--){
+			if (ctrl->on_cmds.cmds[n].payload[0] == led_cabc[0]){
+				ctrl->on_cmds.cmds[n].payload[1] = led_cabc[3];
+				break;
+			}
+		}
+	} else if (pdata->panel_info.cabc_enable == 4) {
+		cabc_level_current = led_cabc[4];
+		for (n = ctrl->on_cmds.cmd_cnt-1;n >0;n--) {
+			if (ctrl->on_cmds.cmds[n].payload[0] == led_cabc[0]) {
+				ctrl->on_cmds.cmds[n].payload[1] = led_cabc[4];
+				break;
+			}
+		}
+	}
+#endif
 	pr_debug("%s: ctrl=%pK ndx=%d\n", __func__, ctrl, ctrl->ndx);
 
 	if (pinfo->dcs_cmd_by_left) {
@@ -1555,6 +1695,9 @@ static int mdss_panel_parse_dt(struct device_node *np,
 				__func__);
 		pinfo->pdest = DISPLAY_1;
 	}
+#ifdef CONFIG_VENDOR_SMARTISAN
+if (ctrl_pdata->com_flag == 0) {
+#endif
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-h-front-porch", &tmp);
 	pinfo->lcdc.h_front_porch = (!rc ? tmp : 6);
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-h-back-porch", &tmp);
@@ -1569,6 +1712,24 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	pinfo->lcdc.v_front_porch = (!rc ? tmp : 6);
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-v-pulse-width", &tmp);
 	pinfo->lcdc.v_pulse_width = (!rc ? tmp : 2);
+#ifdef CONFIG_VENDOR_SMARTISAN
+} else {
+	rc = of_property_read_u32(np, "qcom,mdss-dsi-h-front-porch-com", &tmp);
+	pinfo->lcdc.h_front_porch = (!rc ? tmp : 6);
+	rc = of_property_read_u32(np, "qcom,mdss-dsi-h-back-porch-com", &tmp);
+	pinfo->lcdc.h_back_porch = (!rc ? tmp : 6);
+	rc = of_property_read_u32(np, "qcom,mdss-dsi-h-pulse-width-com", &tmp);
+	pinfo->lcdc.h_pulse_width = (!rc ? tmp : 2);
+	rc = of_property_read_u32(np, "qcom,mdss-dsi-h-sync-skew-com", &tmp);
+	pinfo->lcdc.hsync_skew = (!rc ? tmp : 0);
+	rc = of_property_read_u32(np, "qcom,mdss-dsi-v-back-porch-com", &tmp);
+	pinfo->lcdc.v_back_porch = (!rc ? tmp : 6);
+	rc = of_property_read_u32(np, "qcom,mdss-dsi-v-front-porch-com", &tmp);
+	pinfo->lcdc.v_front_porch = (!rc ? tmp : 6);
+	rc = of_property_read_u32(np, "qcom,mdss-dsi-v-pulse-width-com", &tmp);
+	pinfo->lcdc.v_pulse_width = (!rc ? tmp : 2);
+}
+#endif
 	rc = of_property_read_u32(np,
 		"qcom,mdss-dsi-underflow-color", &tmp);
 	pinfo->lcdc.underflow_clr = (!rc ? tmp : 0xff);
@@ -1641,7 +1802,15 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	pinfo->brightness_max = (!rc ? tmp : MDSS_MAX_BL_BRIGHTNESS);
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-bl-min-level", &tmp);
 	pinfo->bl_min = (!rc ? tmp : 0);
+#ifdef CONFIG_VENDOR_SMARTISAN
+	if (ctrl_pdata->com_flag == 0) {
+		rc = of_property_read_u32(np, "qcom,mdss-dsi-bl-max-level", &tmp);
+	} else {
+		rc = of_property_read_u32(np, "qcom,mdss-dsi-bl-max-level-com", &tmp);
+	}
+#else
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-bl-max-level", &tmp);
+#endif
 	pinfo->bl_max = (!rc ? tmp : 255);
 	ctrl_pdata->bklt_max = pinfo->bl_max;
 
@@ -1747,7 +1916,15 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	pinfo->clk_rate = (!rc ? tmp : 0);
 	rc = of_property_read_u32(np, "qcom,mdss-mdp-transfer-time-us", &tmp);
 	pinfo->mdp_transfer_time_us = (!rc ? tmp : DEFAULT_MDP_TRANSFER_TIME);
+#ifdef CONFIG_VENDOR_SMARTISAN
+	if (ctrl_pdata->com_flag == 0) {
+		data = of_get_property(np, "qcom,mdss-dsi-panel-timings", &len);
+	} else {
+		data = of_get_property(np, "qcom,mdss-dsi-panel-timings-com", &len);
+	}
+#else
 	data = of_get_property(np, "qcom,mdss-dsi-panel-timings", &len);
+#endif
 	if ((!data) || (len != 12)) {
 		pr_err("%s:%d, Unable to read Phy timing settings",
 		       __func__, __LINE__);
@@ -1778,11 +1955,23 @@ static int mdss_panel_parse_dt(struct device_node *np,
 
 	mdss_panel_parse_te_params(np, pinfo);
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+if (ctrl_pdata->com_flag == 0) {
+#endif
 	mdss_dsi_parse_reset_seq(np, pinfo->rst_seq, &(pinfo->rst_seq_len),
 		"qcom,mdss-dsi-reset-sequence");
 
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->on_cmds,
 		"qcom,mdss-dsi-on-command", "qcom,mdss-dsi-on-command-state");
+#ifdef CONFIG_VENDOR_SMARTISAN
+} else {
+	mdss_dsi_parse_reset_seq(np, pinfo->rst_seq, &(pinfo->rst_seq_len),
+		"qcom,mdss-dsi-reset-sequence-com");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->on_cmds,
+	"qcom,mdss-dsi-on-command-com", "qcom,mdss-dsi-on-command-state");
+}
+#endif
 
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->post_panel_on_cmds,
 		"qcom,mdss-dsi-post-panel-on-command", NULL);
@@ -1822,11 +2011,19 @@ static int mdss_panel_parse_dt(struct device_node *np,
 		}
 	}
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+if (ctrl_pdata->com_flag == 1) {
+#endif
 	pinfo->mipi.force_clk_lane_hs = of_property_read_bool(np,
 		"qcom,mdss-dsi-force-clock-lane-hs");
+#ifdef CONFIG_VENDOR_SMARTISAN
+}
+#endif
 
+#ifndef CONFIG_VENDOR_SMARTISAN
 	pinfo->mipi.always_on = of_property_read_bool(np,
 		"qcom,mdss-dsi-always-on");
+#endif
 
 	rc = mdss_dsi_parse_panel_features(np, ctrl_pdata);
 	if (rc) {
@@ -1860,8 +2057,29 @@ int mdss_dsi_panel_init(struct device_node *node,
 	pinfo = &ctrl_pdata->panel_data.panel_info;
 
 	pr_debug("%s:%d\n", __func__, __LINE__);
+#ifdef CONFIG_VENDOR_SMARTISAN
+	ctrl_pdata->vendor_id_gpio = of_get_named_gpio(node,"qcom,platform-vendor-id", 0);
+	if (gpio_is_valid(ctrl_pdata->vendor_id_gpio)) {
+		rc = gpio_request(ctrl_pdata->vendor_id_gpio,"vendor_id");
+		if (rc) {
+			pr_err("request vendor gpio failed, rc=%d\n",rc);
+		}
+	}
+	gpio_direction_input(ctrl_pdata->vendor_id_gpio);
+	ctrl_pdata->com_flag = __gpio_get_value(ctrl_pdata->vendor_id_gpio);
+	gpio_direction_output(ctrl_pdata->vendor_id_gpio, 0);
+	compat_flag = ctrl_pdata->com_flag;
+#endif
 	pinfo->panel_name[0] = '\0';
+#ifdef CONFIG_VENDOR_SMARTISAN
+	if (ctrl_pdata->com_flag == 0) {
+		panel_name = of_get_property(node, "qcom,mdss-dsi-panel-name", NULL);
+	} else {
+		panel_name = of_get_property(node, "qcom,mdss-dsi-panel-name-com", NULL);
+	}
+#else
 	panel_name = of_get_property(node, "qcom,mdss-dsi-panel-name", NULL);
+#endif
 	if (!panel_name) {
 		pr_info("%s:%d, Panel name not specified\n",
 						__func__, __LINE__);
@@ -1891,6 +2109,39 @@ int mdss_dsi_panel_init(struct device_node *node,
 	ctrl_pdata->low_power_config = mdss_dsi_panel_low_power_config;
 	ctrl_pdata->panel_data.set_backlight = mdss_dsi_panel_bl_ctrl;
 	ctrl_pdata->switch_mode = mdss_dsi_panel_switch_mode;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	ctrl_pdata->panel_data.panel_info.cabc_enable = 0;//default do not change value of dtsi
+#endif
 
 	return 0;
 }
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+static ssize_t msm_show_lcd_vendor(struct device *dev,
+				struct device_attribute *attr,char *buf)
+{
+	char* vendor_str[2] = {
+		"NT35532-SHARP",
+		"NT35596-YUSHUN",
+	};
+	if (compat_flag == 0) {
+		return snprintf(buf, 20, "%s\n", vendor_str[0]);
+	} else {
+		return snprintf(buf, 20, "%s\n", vendor_str[1]);
+	}
+}
+
+static ssize_t msm_store_lcd_vendor(struct device *dev,
+				struct device_attribute *attr,const char *buf,size_t count)
+{
+	return 0;
+}
+
+static struct device_attribute lcd_vendor_attr = __ATTR(lcd_vendor, 0644, \
+	msm_show_lcd_vendor, msm_store_lcd_vendor);
+
+void msm_panel_vendor_show(struct platform_device *pdev)
+{
+	device_create_file(&pdev->dev, &lcd_vendor_attr);
+}
+#endif
