@@ -34,7 +34,8 @@ config MSMB_CAMERA_DEBUG
 	  Enable printk() debug for msm camera 2.0
 
 if MSMB_CAMERA
-source "drivers/media/platform/msm/camera_v2/Kconfig"
+# source "drivers/media/platform/msm/camera_v2/Kconfig"
+source "drivers/media/platform/msm/camera_v2_smartisan/Kconfig"
 endif # MSMB_CAMERA
 
 source "drivers/media/platform/msm/vidc/Kconfig"
