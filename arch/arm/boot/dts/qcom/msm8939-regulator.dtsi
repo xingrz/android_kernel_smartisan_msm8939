@@ -49,6 +49,7 @@
 /* Memory accelerator and CPR controlled regulators */
 
 &soc {
+#ifndef CONFIG_VENDOR_SMARTISAN
 	spk_vreg: regulator_spk {
 		compatible = "regulator-fixed";
 		regulator-name = "spk_vreg";
@@ -56,6 +57,7 @@
 		enable-active-high;
 		gpio = <&msm_gpio 121 0>;
 	};
+#endif
 
 	mem_acc_vreg_corner: regulator@1942130 {
 		compatible = "qcom,mem-acc-regulator";

@@ -11,7 +11,11 @@
  */
 
 #include "msm8939-qrd.dtsi"
+#ifdef CONFIG_VENDOR_SMARTISAN
+#include "u1-msm8939-camera-sensor-qrd.dtsi"
+#else
 #include "msm8939-camera-sensor-qrd.dtsi"
+#endif
 
 &soc {
 	i2c@78b9000 { /* BLSP1 QUP5 */
@@ -150,6 +154,7 @@
 	};
 };
 
+#ifndef CONFIG_VENDOR_SMARTISAN
 &i2c_0 { /* BLSP1 QUP2 */
 	avago@39 { /* Ambient light and proximity sensor */
 		compatible = "avago,apds9930";
@@ -212,6 +217,7 @@
 		invn,place = "Portrait Down Back Side";
 	};
 };
+#endif
 
 &sdc2_cd_on {
 	/delete-property/ bias-pull-up;
@@ -236,6 +242,7 @@
 	qcom,mdss-pref-prim-intf = "dsi";
 };
 
+#ifndef CONFIG_VENDOR_SMARTISAN
 &pmx_mdss {
 	qcom,num-grp-pins = <2>;
 	qcom,pins = <&gp 1>, <&gp 25>;
@@ -249,4 +256,5 @@
 	qcom,platform-reset-gpio = <&msm_gpio 25 0>;
 	qcom,platform-bklight-en-gpio = <&msm_gpio 1 0>;
 };
+#endif
 

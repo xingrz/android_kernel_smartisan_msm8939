@@ -22,6 +22,7 @@
 	qcom,board-id = <0x1000b 5>, <0x2000b 5>;
 };
 
+#ifndef CONFIG_VENDOR_SMARTISAN
 &tlmm_pinmux {
 	tps65132-en-pin {
 		qcom,pins = <&gp 97>, <&gp 98>;
@@ -68,6 +69,7 @@
 		};
 	};
 };
+#endif
 
 &i2c_4 {
 	smb1360_otg_supply: smb1360-chg-fg@14 {
@@ -111,6 +113,7 @@
 	qcom,disable-bms;
 };
 
+#ifndef CONFIG_VENDOR_SMARTISAN
 &mdss_dsi0 {
 	qcom,dsi-pref-prim-pan = <&dsi_nt35596_1080p_skuk_video>;
 
@@ -150,6 +153,7 @@
 	qcom,mdss-dsi-pan-enable-dynamic-fps;
 	qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode";
 };
+#endif
 
 &usb_otg {
        qcom,hsusb-otg-mode = <3>;

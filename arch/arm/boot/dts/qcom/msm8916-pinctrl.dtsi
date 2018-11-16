@@ -30,6 +30,7 @@
 			};
 		};
 
+#ifndef CONFIG_VENDOR_SMARTISAN
 		ext-cdc-tlmm-lines {
 			qcom,pins = <&gp 116>, <&gp 112>, <&gp 117>,
 						<&gp 118>, <&gp 119>;
@@ -45,6 +46,7 @@
 				bias-disable;
 			};
 		};
+#endif
 
 		ext-codec-lines {
 			qcom,pins = <&gp 67>;
@@ -123,6 +125,7 @@
 			};
 		};
 
+#ifndef CONFIG_VENDOR_SMARTISAN
 		cross-conn-det {
 			qcom,pins = <&gp 120>;
 			qcom,num-grp-pins = <1>;
@@ -138,6 +141,7 @@
 				bias-disable;
 			};
 		};
+#endif
 		pmx-uartconsole {
 			qcom,pins = <&gp 4>, <&gp 5>;
 			qcom,num-grp-pins = <2>;
