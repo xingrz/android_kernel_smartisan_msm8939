@@ -64,12 +64,14 @@
 	};
 };
 
+#ifndef CONFIG_VENDOR_SMARTISAN
 &tlmm_pinmux {
 	gpio_led_pins {
 		qcom,pins = <&gp 117>, <&gp 118>;
 		qcom,num-grp-pins = <2>;
 	};
 };
+#endif
 
 &mdss_mdp {
 	qcom,mdss-pref-prim-intf = "dsi";

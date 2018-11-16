@@ -311,4 +311,6 @@
 };
 
 #include "dsi-panel-sim-video.dtsi"
+#ifndef CONFIG_VENDOR_SMARTISAN
 #include "dsi-panel-sim-cmd.dtsi"
+#endif
