@@ -118,7 +118,11 @@
 #define CV_DROP_MARGIN			10000
 #define MIN_OCV_UV			2000000
 #define TIME_PER_PERCENT_UUC		60
+#ifdef CONFIG_VENDOR_SMARTISAN
+#define IAVG_SAMPLES			6
+#else
 #define IAVG_SAMPLES			16
+#endif
 #define MIN_SOC_UUC			3
 
 #define QPNP_VM_BMS_DEV_NAME		"qcom,qpnp-vm-bms"
@@ -1434,6 +1438,11 @@ static int report_eoc(struct qpnp_bms_chip *chip)
 	return rc;
 }
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+extern bool charger_in;
+#define RECHARGE_LIMIT 4375000
+#endif
+
 static void check_recharge_condition(struct qpnp_bms_chip *chip)
 {
 	int rc;
@@ -1443,13 +1452,23 @@ static void check_recharge_condition(struct qpnp_bms_chip *chip)
 	if (chip->last_soc > chip->dt.cfg_soc_resume_limit)
 		return;
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+	if (100 == chip->dt.cfg_soc_resume_limit && chip->last_ocv_uv >= RECHARGE_LIMIT)
+		return;
+#endif
+
 	if (status == POWER_SUPPLY_STATUS_UNKNOWN) {
 		pr_debug("Unable to read battery status\n");
 		return;
 	}
 
 	/* Report recharge to charger for SOC based resume of charging */
+#ifdef CONFIG_VENDOR_SMARTISAN
+	if (((status != POWER_SUPPLY_STATUS_CHARGING) || charger_in) && chip->eoc_reported) {
+		charger_in = false;
+#else
 	if ((status != POWER_SUPPLY_STATUS_CHARGING) && chip->eoc_reported) {
+#endif
 		ret.intval = POWER_SUPPLY_STATUS_CHARGING;
 		rc = chip->batt_psy->set_property(chip->batt_psy,
 				POWER_SUPPLY_PROP_STATUS, &ret);
