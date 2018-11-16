@@ -25,6 +25,9 @@
 #include <linux/bitops.h>
 #include <linux/leds.h>
 #include <linux/debugfs.h>
+#ifdef CONFIG_VENDOR_SMARTISAN
+#include <linux/wakelock.h>
+#endif
 
 #define CREATE_MASK(NUM_BITS, POS) \
 	((unsigned char) (((1 << (NUM_BITS)) - 1) << (POS)))
@@ -120,6 +123,10 @@
 
 #define QPNP_CHARGER_DEV_NAME	"qcom,qpnp-linear-charger"
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+bool charger_in = false;
+#endif
+
 /* usb_interrupts */
 
 struct qpnp_lbc_irq {
@@ -200,6 +207,9 @@ static enum power_supply_property msm_batt_power_props[] = {
 	POWER_SUPPLY_PROP_COOL_TEMP,
 	POWER_SUPPLY_PROP_WARM_TEMP,
 	POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL,
+#ifdef CONFIG_VENDOR_SMARTISAN
+	POWER_SUPPLY_PROP_TECHNOLOGY,
+#endif
 };
 
 static char *pm_batt_supplied_to[] = {
@@ -352,6 +362,9 @@ struct qpnp_lbc_chip {
 	int				charger_disabled;
 	int				prev_max_ma;
 	int				usb_psy_ma;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	int				bat_is_overtemp;
+#endif
 	int				delta_vddmax_uv;
 	int				init_trim_uv;
 
@@ -362,6 +375,10 @@ struct qpnp_lbc_chip {
 
 	struct alarm			vddtrim_alarm;
 	struct work_struct		vddtrim_work;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	struct delayed_work		full_work;
+	struct wake_lock		full_wake_lock;
+#endif
 	struct qpnp_lbc_irq		irqs[MAX_IRQS];
 	struct mutex			jeita_configure_lock;
 	struct mutex			chg_enable_lock;
@@ -979,9 +996,15 @@ static int qpnp_lbc_tchg_max_set(struct qpnp_lbc_chip *chip, int minutes)
 		return rc;
 	}
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+	/* Disable timer */
+	rc = qpnp_lbc_masked_write(chip, chip->chgr_base + CHG_TCHG_MAX_EN_REG,
+				CHG_TCHG_MAX_EN_BIT, 0);
+#else
 	/* Enable timer */
 	rc = qpnp_lbc_masked_write(chip, chip->chgr_base + CHG_TCHG_MAX_EN_REG,
 				CHG_TCHG_MAX_EN_BIT, CHG_TCHG_MAX_EN_BIT);
+#endif
 	if (rc) {
 		pr_err("Failed to write tchg_max_en rc=%d\n", rc);
 		return rc;
@@ -1177,6 +1200,23 @@ static int get_prop_charge_type(struct qpnp_lbc_chip *chip)
 	return POWER_SUPPLY_CHARGE_TYPE_NONE;
 }
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+static int qpnp_lbc_is_fastchg_on(struct qpnp_lbc_chip *chip)
+{
+	u8 reg_val;
+	int rc;
+
+	rc = qpnp_lbc_read(chip, chip->chgr_base + INT_RT_STS_REG,
+				&reg_val, 1);
+	if (rc) {
+		pr_err("Failed to read interrupt status rc=%d\n", rc);
+		return rc;
+	}
+	pr_debug("charger status %x\n", reg_val);
+	return (reg_val & FAST_CHG_ON_IRQ) ? 1 : 0;
+}
+#endif
+
 static int get_prop_batt_status(struct qpnp_lbc_chip *chip)
 {
 	int rc;
@@ -1194,6 +1234,14 @@ static int get_prop_batt_status(struct qpnp_lbc_chip *chip)
 
 	if (reg_val & FAST_CHG_ON_IRQ)
 		return POWER_SUPPLY_STATUS_CHARGING;
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+	if (qpnp_lbc_is_fastchg_on(chip) ||
+			qpnp_lbc_is_usb_chg_plugged_in(chip)) {
+		charger_in = true;
+		return POWER_SUPPLY_STATUS_CHARGING;
+	}
+#endif
 
 	return POWER_SUPPLY_STATUS_DISCHARGING;
 }
@@ -1484,6 +1532,9 @@ static int qpnp_batt_property_is_writeable(struct power_supply *psy,
  *    (may be from a previous soc resume)
  * b. disable charging
  */
+#ifdef CONFIG_VENDOR_SMARTISAN
+#define FULL_CHECK_PERIOD_MS 30*60*1000
+#endif
 static int qpnp_batt_power_set_property(struct power_supply *psy,
 				enum power_supply_property psp,
 				const union power_supply_propval *val)
@@ -1499,6 +1550,11 @@ static int qpnp_batt_power_set_property(struct power_supply *psy,
 		case POWER_SUPPLY_STATUS_FULL:
 			if (chip->cfg_float_charge)
 				break;
+#ifdef CONFIG_VENDOR_SMARTISAN
+			chip->chg_done = true;
+			schedule_delayed_work(&chip->full_work,
+					msecs_to_jiffies(0));
+#else
 			/* Disable charging */
 			rc = qpnp_lbc_charger_enable(chip, SOC, 0);
 			if (rc)
@@ -1523,6 +1579,7 @@ static int qpnp_batt_power_set_property(struct power_supply *psy,
 					qpnp_lbc_enable_irq(chip,
 						&chip->irqs[CHG_VBAT_DET_LO]);
 			}
+#endif
 			break;
 		case POWER_SUPPLY_STATUS_CHARGING:
 			chip->chg_done = false;
@@ -1623,6 +1680,11 @@ static int qpnp_batt_power_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
 		val->intval = chip->therm_lvl_sel;
 		break;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	case POWER_SUPPLY_PROP_TECHNOLOGY:
+		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
+		break;
+#endif
 	default:
 		return -EINVAL;
 	}
@@ -1774,9 +1836,16 @@ static int qpnp_lbc_parallel_get_property(struct power_supply *psy,
 static void qpnp_lbc_jeita_adc_notification(enum qpnp_tm_state state, void *ctx)
 {
 	struct qpnp_lbc_chip *chip = ctx;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	static bool bat_warm = 0, bat_cool = 0;
+#else
 	bool bat_warm = 0, bat_cool = 0;
+#endif
 	int temp;
 	unsigned long flags;
+#ifdef CONFIG_VENDOR_SMARTISAN
+	int rc;
+#endif
 
 	if (state >= ADC_TM_STATE_NUM) {
 		pr_err("invalid notification %d\n", state);
@@ -1842,6 +1911,26 @@ static void qpnp_lbc_jeita_adc_notification(enum qpnp_tm_state state, void *ctx)
 		chip->bat_is_warm = bat_warm;
 		qpnp_lbc_set_appropriate_vddmax(chip);
 		qpnp_lbc_set_appropriate_current(chip);
+#ifdef CONFIG_VENDOR_SMARTISAN
+		chip->bat_is_overtemp = (bat_cool || bat_warm);
+		if (chip->bat_is_overtemp) {
+			/* Disable charging */
+			rc = qpnp_lbc_charger_enable(chip, THERMAL, 0);
+			if (rc)
+				pr_err("Failed to disable charging rc=%d\n",
+					rc);
+		} else {
+			/* Enable charging */
+			rc = qpnp_lbc_charger_enable(chip, THERMAL, 1);
+			if (rc)
+				pr_err("Failed to enable charging rc=%d\n",
+					rc);
+		}
+		if (chip->bat_if_base) {
+			pr_debug("%s:psy changed batt_psy\n", __func__);
+			power_supply_changed(&chip->batt_psy);
+		}
+#endif
 		spin_unlock_irqrestore(&chip->ibat_change_lock, flags);
 	}
 
@@ -2313,6 +2402,16 @@ static int qpnp_charger_read_dt_props(struct qpnp_lbc_chip *chip)
 	return rc;
 }
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+int ft5x06_init = 0;
+struct qpnp_lbc_chip *chip_for_tp;
+extern int ft5x06_ts_avoid_usb_noise (int usb_in);
+bool get_usb_presenti_for_tp(void)
+{
+	return chip_for_tp->usb_present;
+}
+#endif
+
 static irqreturn_t qpnp_lbc_usbin_valid_irq_handler(int irq, void *_chip)
 {
 	struct qpnp_lbc_chip *chip = _chip;
@@ -2331,6 +2430,9 @@ static irqreturn_t qpnp_lbc_usbin_valid_irq_handler(int irq, void *_chip)
 			qpnp_lbc_set_appropriate_current(chip);
 			spin_unlock_irqrestore(&chip->ibat_change_lock,
 								flags);
+#ifdef CONFIG_VENDOR_SMARTISAN
+			wake_unlock(&chip->full_wake_lock);
+#endif
 		} else {
 			/*
 			 * Override VBAT_DET comparator to start charging
@@ -2350,6 +2452,11 @@ static irqreturn_t qpnp_lbc_usbin_valid_irq_handler(int irq, void *_chip)
 		pr_debug("Updating usb_psy PRESENT property\n");
 		power_supply_set_present(chip->usb_psy, chip->usb_present);
 	}
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+	if (ft5x06_init)
+		ft5x06_ts_avoid_usb_noise (usb_present);
+#endif
 
 	return IRQ_HANDLED;
 }
@@ -2434,6 +2541,7 @@ static irqreturn_t qpnp_lbc_chg_failed_irq_handler(int irq, void *_chip)
 	return IRQ_HANDLED;
 }
 
+#ifndef CONFIG_VENDOR_SMARTISAN
 static int qpnp_lbc_is_fastchg_on(struct qpnp_lbc_chip *chip)
 {
 	u8 reg_val;
@@ -2448,6 +2556,7 @@ static int qpnp_lbc_is_fastchg_on(struct qpnp_lbc_chip *chip)
 	pr_debug("charger status %x\n", reg_val);
 	return (reg_val & FAST_CHG_ON_IRQ) ? 1 : 0;
 }
+#endif
 
 #define TRIM_PERIOD_NS			(50LL * NSEC_PER_SEC)
 static irqreturn_t qpnp_lbc_fastchg_irq_handler(int irq, void *_chip)
@@ -2697,6 +2806,64 @@ static void determine_initial_status(struct qpnp_lbc_chip *chip)
 	if (chip->usb_present)
 		power_supply_set_online(chip->usb_psy, 1);
 }
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+static void qpnp_lbc_full_work_fn(struct work_struct *work)
+{
+	int rc;
+	struct qpnp_lbc_chip *chip = container_of(work, struct qpnp_lbc_chip,
+						full_work.work);
+	static bool is_present = true;
+
+	if (!qpnp_lbc_is_usb_chg_plugged_in(chip)) {
+		cancel_delayed_work_sync(&chip->full_work);
+		wake_unlock(&chip->full_wake_lock);
+		return;
+	}
+
+	if (!wake_lock_active(&chip->full_wake_lock)) {
+		wake_lock(&chip->full_wake_lock);
+		is_present = false;
+		pr_err("holding full wake lock\n");
+		schedule_delayed_work(&chip->full_work,
+				msecs_to_jiffies(FULL_CHECK_PERIOD_MS));
+		return;
+	} else if (is_present) {
+		return;
+	}
+
+	is_present = true;
+
+	/* Disable charging */
+	rc = qpnp_lbc_charger_enable(chip, SOC, 0);
+	if (rc) {
+		pr_err("Failed to disable charging rc=%d\n",
+				rc);
+	}
+
+	/*
+	 * Enable VBAT_DET based charging:
+	 * To enable charging when VBAT falls below VBAT_DET
+	 * and device stays suspended after EOC.
+	 */
+	if (!chip->cfg_disable_vbatdet_based_recharge) {
+		/* No override for VBAT_DET_LO comp */
+		rc = qpnp_lbc_vbatdet_override(chip,
+					OVERRIDE_NONE);
+		if (rc)
+			pr_err("Failed to override VBAT_DET rc=%d\n",
+					rc);
+		else
+			qpnp_lbc_enable_irq(chip,
+				&chip->irqs[CHG_VBAT_DET_LO]);
+	}
+
+	if (wake_lock_active(&chip->full_wake_lock)) {
+		wake_unlock(&chip->full_wake_lock);
+		pr_err("releasing full wake lock\n");
+	}
+}
+#endif
 
 #define IBAT_TRIM			-300
 static void qpnp_lbc_vddtrim_work_fn(struct work_struct *work)
@@ -2987,6 +3154,9 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 		return -ENOMEM;
 	}
 
+#ifdef CONFIG_VENDOR_SMARTISAN
+	chip_for_tp = chip;
+#endif
 	chip->usb_psy = usb_psy;
 	chip->dev = &spmi->dev;
 	chip->spmi = spmi;
@@ -3104,6 +3274,11 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 			}
 		}
 	}
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+	INIT_DELAYED_WORK(&chip->full_work, qpnp_lbc_full_work_fn);
+	wake_lock_init(&chip->full_wake_lock, WAKE_LOCK_SUSPEND, "qpnp_full_lock");
+#endif
 
 	rc = qpnp_lbc_bat_if_configure_btc(chip);
 	if (rc) {
