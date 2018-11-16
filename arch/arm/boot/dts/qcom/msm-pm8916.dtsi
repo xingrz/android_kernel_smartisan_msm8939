@@ -38,9 +38,17 @@
 				qcom,pon-type = <0>;
 				qcom,support-reset = <1>;
 				qcom,pull-up = <1>;
+#ifdef CONFIG_VENDOR_SMARTISAN
+				qcom,s1-timer = <6720>;
+#else
 				qcom,s1-timer = <10256>;
+#endif
 				qcom,s2-timer = <2000>;
+#ifdef CONFIG_VENDOR_SMARTISAN
+				qcom,s2-type = <7>;
+#else
 				qcom,s2-type = <1>;
+#endif
 				linux,code = <116>;
 			};
 
@@ -288,7 +296,11 @@
 			qcom,force-s3-on-suspend;
 			qcom,force-s2-in-charging;
 			qcom,report-charger-eoc;
+#ifdef CONFIG_VENDOR_SMARTISAN
+			qcom,resume-soc = <100>;
+#else
 			qcom,resume-soc = <99>;
+#endif
 
 			qcom,batt-pres-status@1208 {
 				reg = <0x1208 0x1>;

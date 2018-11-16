@@ -315,6 +315,7 @@
 			};
 		};
 
+#ifndef CONFIG_VENDOR_SMARTISAN
 		 spi0_active {
                         /* MOSI, MISO, CLK */
                         qcom,pins = <&gp 8>, <&gp 9>, <&gp 11>;
@@ -364,6 +365,7 @@
                                 bias-disable = <0>;
                         };
                 };
+#endif
 
 		wcnss_pmux_5wire: wcnss_pmux_5wire {
 			/* Uses general purpose pins */
@@ -678,6 +680,7 @@
 			};
 		};
 
+#ifndef CONFIG_VENDOR_SMARTISAN
 		ext-cdc-tlmm-lines {
 			qcom,pins = <&gp 116>, <&gp 112>, <&gp 117>,
 					<&gp 118>, <&gp 119>;
@@ -692,6 +695,7 @@
 				bias-disable;
 			};
 		};
+#endif
 
 		cdc_slim_lines {
 			qcom,pins = <&gp 63>;
@@ -725,6 +729,7 @@
 			};
 		};
 
+#ifndef CONFIG_VENDOR_SMARTISAN
 		cross-conn-det {
 			qcom,pins = <&gp 120>;
 			qcom,num-grp-pins = <1>;
@@ -740,6 +745,7 @@
 				bias-disable;
 			};
 		};
+#endif
 
 		pmx_mdss: pmx_mdss {
 			label = "mdss-pins";
@@ -1235,6 +1241,7 @@
 			};
 		};
 
+#ifndef CONFIG_VENDOR_SMARTISAN
 		tpiu_seta_15 {
 			qcom,pins = <&gp 112>;
 			qcom,num-grp-pins = <1>;
@@ -1245,6 +1252,7 @@
 				bias-disable;
 			};
 		};
+#endif
 
 		tpiu_seta_16 {
 			qcom,pins = <&gp 113>;
@@ -1455,6 +1463,7 @@
 			};
 		};
 
+#ifndef CONFIG_VENDOR_SMARTISAN
 		tpiu_setb_17 {
 			qcom,pins = <&gp 120>;
 			qcom,num-grp-pins = <1>;
@@ -1476,6 +1485,7 @@
 				bias-disable;
 			};
 		};
+#endif
 
 		uicc-active {
 			qcom,pins = <&gp 53>, <&gp 54>;
