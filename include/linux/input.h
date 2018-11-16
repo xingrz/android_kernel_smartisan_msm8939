@@ -187,6 +187,10 @@ struct input_dev {
 	struct input_value *vals;
 
 	bool devres_managed;
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+	bool is_resumed;
+#endif
 };
 #define to_input_dev(d) container_of(d, struct input_dev, dev)
 
@@ -359,6 +363,11 @@ int __must_check input_register_device(struct input_dev *);
 void input_unregister_device(struct input_dev *);
 
 void input_reset_device(struct input_dev *);
+
+#ifdef CONFIG_VENDOR_SMARTISAN
+int get_input_resume_state(void);
+void set_input_resume_state(int state);
+#endif
 
 int __must_check input_register_handler(struct input_handler *);
 void input_unregister_handler(struct input_handler *);
