@@ -32,7 +32,9 @@
 			qcom,pon-dbc-delay = <15625>;
 			qcom,system-reset;
 			qcom,clear-warm-reset;
+#ifndef CONFIG_VENDOR_SMARTISAN
 			qcom,store-hard-reset-reason;
+#endif
 
 			/* Power */
 			qcom,pon_1 {
