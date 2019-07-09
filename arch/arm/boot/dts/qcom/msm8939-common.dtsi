@@ -1900,5 +1900,18 @@
 		qcom,fast-avg-setup = <2>;
 		qcom,btm-channel-number = <0x68>;
 	};
+
+	chan@3c {
+		label = "xo_therm_buf";
+		reg = <0x3c>;
+		qcom,decimation = <0x0>;
+		qcom,pre-div-channel-scaling = <0x0>;
+		qcom,calibration-type = "ratiometric";
+		qcom,scale-function = <0x4>;
+		qcom,hw-settle-time = <0x2>;
+		qcom,fast-avg-setup = <0x0>;
+		qcom,btm-channel-number = <0x70>;
+		qcom,thermal-node;
+	};
 };
 
