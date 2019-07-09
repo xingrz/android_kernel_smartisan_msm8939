@@ -16,8 +16,8 @@
 	qcom,vddmax-mv = <4400>;
 	qcom,vddsafe-mv = <4500>;
 	qcom,vinmin-mv = <4508>;
-	qcom,cool-bat-decidegc = <100>;
-	qcom,warm-bat-decidegc = <450>;
+	qcom,cool-bat-decidegc = <0>;
+	qcom,warm-bat-decidegc = <500>;
 	qcom,resume-soc = <99>;
 	/*qcom,use-external-charger;*/
 	/*qcom,use-default-batt-values;*/
@@ -38,6 +38,9 @@
 	qcom,s1-sample-interval-ms = <50>;
 	qcom,s2-sample-interval-ms = <40>;
 	/*qcom,disable-bms;*/
+	qcom,volatge-soc-timeout-ms = <80000>;
+	qcom,resume-soc = <99>;
+	qcom,force-bms-active-on-charger;
 	qcom,battery-data = <&qrd_batterydata>;
 };
 

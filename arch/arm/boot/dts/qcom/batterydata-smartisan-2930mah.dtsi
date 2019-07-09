@@ -12,7 +12,7 @@
 
 qcom,qrd-4v4-2930mah-data {
 	qcom,default-rbatt-mohm = <146>;
-	qcom,max-voltage-uv = <4400>;
+	qcom,max-voltage-uv = <4400000>;
 	qcom,fcc-mah = <2930>;
 	qcom,rbatt-capacitive-mohm = <0>;
 	qcom,v-cutoff-uv = <3400000>;
