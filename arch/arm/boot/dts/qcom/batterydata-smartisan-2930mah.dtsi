@@ -29,7 +29,7 @@ qcom,qrd-4v4-2930mah-data {
 				<607 2548 2863>,
 				<135 1724 2802>;
 	};
-	
+
 	qcom,fcc-temp-lut {
 		qcom,lut-col-legend = <(-20) 0 25 40 60>;
 		qcom,lut-data = <2990 2996 2996 2986 2966>;
