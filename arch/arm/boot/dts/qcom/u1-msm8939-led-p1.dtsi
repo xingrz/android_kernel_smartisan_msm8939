@@ -28,7 +28,7 @@
 			qcom,led_ktd202x {
 				label = "ktd202x";
 				linux,name = "red";
-				linux,default-trigger = "battery-charging";
+				linux,default-trigger = "none";
 				qcom,default-state = "off";
 				qcom,trickle-gpio = <&msm_gpio 118 0x00>;
 				qcom,max-current = <0xC0>;//24mA
@@ -47,7 +47,7 @@
 			qcom,led_ktd202x {
 				label = "ktd202x";
 				linux,name = "green";
-				linux,default-trigger = "battery-charging";
+				linux,default-trigger = "none";
 				qcom,leds_gpio = <&msm_gpio 101 0>;
 				qcom,default-state = "off";
 				qcom,max-current = <0xC0>;//24mA
@@ -66,7 +66,7 @@
 			qcom,led_ktd202x {
 				label = "ktd202x";
 				linux,name = "blue";
-				linux,default-trigger = "battery-charging";
+				linux,default-trigger = "none";
 				qcom,default-state = "off";
 				qcom,max-current = <0xC0>;//24mA
 				qcom,current-setting = <5>;
