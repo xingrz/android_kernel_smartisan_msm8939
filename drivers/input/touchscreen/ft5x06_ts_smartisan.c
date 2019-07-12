@@ -30,6 +30,7 @@
 #include <linux/firmware.h>
 #include <linux/debugfs.h>
 #include <linux/input/ft5x06_ts_smartisan.h>
+#include <linux/input/keypad.h>
 
 #if defined(CONFIG_FB)
 #include <linux/notifier.h>
@@ -339,6 +340,37 @@ static void ft5x06_update_fw_ver(struct ft5x06_ts_data *data)
 
 	dev_info(&client->dev, "Firmware version = %d.%d.%d\n",
 		data->fw_ver[0], data->fw_ver[1], data->fw_ver[2]);
+}
+
+static int ft5x0x_keypad_read(u32 *code, void *data)
+{
+	struct tsp_key *tsp_key = (struct tsp_key *) data;
+
+	if (!tsp_key) {
+		return -ENODEV;
+	}
+
+	*code = tsp_key->key_code;
+
+	return 0;
+}
+
+static int ft5x0x_keypad_write(u32 code, void *data)
+{
+	struct tsp_key *tsp_key = (struct tsp_key *) data;
+	struct ft5x06_ts_data *ts_data = globle_ft5x06_ts_data;
+
+	if (!tsp_key) {
+		return -ENODEV;
+	}
+
+	if (code >= 0) {
+		input_set_capability(ts_data->input_dev, EV_KEY, code);
+	}
+
+	tsp_key->key_code = code;
+
+	return 0;
 }
 
 static int ft5x0x_touch_key_process(struct ft5x06_ts_data *data, struct input_dev *dev, int x, int y, int touch_event)
@@ -1575,6 +1607,18 @@ static int ft5x06_parse_dt(struct device *dev,
 				pdata->tsp_key[i].key_rect.y,
 				pdata->tsp_key[i].key_rect.dx,
 				pdata->tsp_key[i].key_rect.dy);
+		}
+
+		if (num_buttons == 3) {
+			keypad_register("nav_left", &pdata->tsp_key[0],
+				ft5x0x_keypad_read,
+				ft5x0x_keypad_write);
+			keypad_register("nav_middle", &pdata->tsp_key[1],
+				ft5x0x_keypad_read,
+				ft5x0x_keypad_write);
+			keypad_register("nav_right", &pdata->tsp_key[2],
+				ft5x0x_keypad_read,
+				ft5x0x_keypad_write);
 		}
 
 		if (rc) {
