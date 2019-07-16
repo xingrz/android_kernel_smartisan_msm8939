@@ -254,7 +254,7 @@ static struct dentry *proc_uid_lookup(struct inode *dir, struct dentry *dentry,
 {
 	int result = -ENOENT;
 
-	uid_t uid = name_to_int(&dentry->d_name);
+	uid_t uid = name_to_int(dentry);
 	bool uid_exists;
 
 	rt_mutex_lock(&proc_uid_lock);
