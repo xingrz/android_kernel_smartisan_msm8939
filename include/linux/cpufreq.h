@@ -15,6 +15,7 @@
 #include <linux/completion.h>
 #include <linux/kobject.h>
 #include <linux/notifier.h>
+#include <linux/pid_namespace.h>
 #include <linux/sysfs.h>
 #include <asm/cputime.h>
 
